@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# Run a node
+
+
+# Ensure we're in the Product directory
+cd "$( dirname "${BASH_SOURCE[0]}" )"
+
+# Go to code and start
+cd ./code
+python ./main_distrim.py $*
+

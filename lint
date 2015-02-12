@@ -1,0 +1,7 @@
+#!/bin/bash
+
+# Ensure we're in the Product directory
+cd "$( dirname "${BASH_SOURCE[0]}" )"
+
+# Lint All
+find -name '*.py' -exec echo "** Linting: " {} \; -exec pylint -r n {} \;

@@ -1,0 +1,4 @@
+# Necessary packages for Python environment
+greenlet
+gevent
+thread_pool

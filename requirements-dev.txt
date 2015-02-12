@@ -1,0 +1,10 @@
+#dev
+pylint
+ipython
+pytest
+#docs
+sphinx
+Jinja2
+Pygments
+docutils
+markupsafe

@@ -1,0 +1,19 @@
+#!/bin/bash
+
+# Clean
+
+# Ensure we're in the Product directory
+cd "$( dirname "${BASH_SOURCE[0]}" )"
+
+#echo "$DIR"
+
+# Removes any files matching the pattern specified in .gitignore
+
+find -name "*~" -exec rm {} \;
+find -name "*.pyc" -exec rm {} \;
+find -name "__pycache__" -exec rm {} \;
+
+#while read in; do find -name "$in" -exec rm {} \;; done < .gitignore
+
+# Clear any built documentation
+cd ./docs/_build; rm -r *; cd ../;
