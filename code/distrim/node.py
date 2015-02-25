@@ -19,33 +19,36 @@
 """
 
 
-from gevent.server import StreamServer
+from .connections import ConnectionsManager
 
-from .utils.config import CFG_FINAL as CFG
+from .utils.config import CFG
 from .utils.logger import log
-
+from .utils.utilities import get_local_ip
 
 
 class Node(object):
 
-    def __init__(self):
+    def __init__(self, local_ip=''):
         """
         Entry point for the program.
 
         Initiates the application with the parameters passed in.
         """
+        print "__name__", __name__
+        if not local_ip:
+            local_ip = get_local_ip()
 
-        # ArgParse docs: https://docs.python.org/dev/library/argparse.html
-        print "oops"
-
-        log("Listening for connections from %s:%d", CFG['localhost'],
-            CFG['listening_port'])
-        self.server = StreamServer((CFG['localhost'], CFG['listening_port']),
-                                   handle)
+        log("Node IP address: %s" % (local_ip,))
+        self.connections_manager = ConnectionsManager(CFG['localhost'],
+                                                      CFG['listening_port'])
+        #https://pythonhosted.org/pycrypto/
 
     def start(self):
         #self.server.start()
         print "Node started..."
+
+    def stop(self):
+        print "Node Stopping..."
 
     def run_command(self, command_string):
         print "Node received: ", command_string
@@ -53,9 +56,6 @@ class Node(object):
     def destroy(self):
         pass
 
-
-def handle():
-    print("MAKE IT RAIN")
 
 
 
