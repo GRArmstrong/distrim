@@ -1,4 +1,6 @@
 # Necessary packages for Python environment
-greenlet
-gevent
+#greenlet
+#gevent
 thread_pool
+netifaces
+pycrypto

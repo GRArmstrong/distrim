@@ -2,6 +2,7 @@
 
 # Ensure we're in the Product directory
 cd "$( dirname "${BASH_SOURCE[0]}" )"
+cd ./code
 
 # Lint All
-find -name '*.py' -exec echo "** Linting: " {} \; -exec pylint -r n {} \;
+find -name '*.py' -exec echo -e "\n===========| Linting: " {} " |==============" \; -exec pylint -r n {} \; 
