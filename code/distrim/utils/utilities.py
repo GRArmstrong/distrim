@@ -18,7 +18,11 @@
     Miscelaneous Utility functions.
 """
 
-from ..assets.errors import InvalidIPAddressError
+
+from netifaces import gateways, interfaces, ifaddresses, AF_INET
+
+from .logger import log
+from ..assets.errors import InvalidIPAddressError, NetInterfaceError
 
 
 def parse_ip(str_ip):
@@ -35,7 +39,7 @@ def parse_ip(str_ip):
     ip, seperator, port = str_ip.partition(':')
     ip_address = tuple([int(x) for x in ip.split('.')])
     port = int(port)
-    
+
     # Validation
     for octet in ip_address:
         if octet < 0 or octet > 255:
@@ -45,3 +49,21 @@ def parse_ip(str_ip):
         raise InvalidIPAddressError(
             "Invalid IP address, invalid port %d" % (port,))
     return ip_address, int(port)
+
+
+def get_local_ip(address_type=AF_INET):
+    """
+    Determine local IP address of node from its interface IP.
+
+
+    :param address_type: Any address type from the `AF_*` values in the
+        `netifaces` module. Default `AF_INET` for IPv4 addresses.
+    """
+    default_gateway = gateways().get('default')
+    if not default_gateway:
+        raise NetInterfaceError("No default gateway found.")
+
+    gateway_ip, interface = default_gateway.get(address_type)
+    for addresses in ifaddresses(interface).get(address_type):
+        if addresses.get('addr')[:3] == gateway_ip[:3]:
+            return addresses.get('addr')

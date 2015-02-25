@@ -22,3 +22,6 @@
 class InvalidIPAddressError(ValueError):
     pass
 
+
+class NetInterfaceError(Exception):
+    pass

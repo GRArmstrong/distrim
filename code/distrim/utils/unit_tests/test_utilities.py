@@ -24,7 +24,7 @@
 import unittest
 
 
-from ..utilities import parse_ip       
+from ..utilities import parse_ip
 
 from ...assets.errors import InvalidIPAddressError
 

@@ -14,8 +14,8 @@
 ## at the University of Northumbria at Newcastle.
 
 """
-	Text messages used in various parts of DistrIM, they're kept in here to
-	keep things tidy.
+    Text messages used in various parts of DistrIM, they're kept in here to
+    keep things tidy.
 """
 
 CMD_DESCRIPTION = """DistrIM is a DHT-based network for secured messaging.

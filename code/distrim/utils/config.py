@@ -29,7 +29,9 @@ VALUE = genconf()
 
 
 
-CFG_FINAL = {
+CFG = {
     'localhost': "127.0.0.1",
-    'listening_port': 2000
+    'listening_port': 2000,
+    'listening_queue': 5,
+    'thread_pool_length': 8,
 }
