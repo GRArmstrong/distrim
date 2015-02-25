@@ -18,6 +18,40 @@
     Logging
 """
 
+
+import logging
+
+from logging.handlers import DatagramHandler
+
+
 def log(string, *args):
     #TODO: Replace with actual logger
     print string % args
+
+def create_logger(name, remote_ip='', remote_port=3001, show_debug=True):
+    """
+    Spawns a Python logger to output application messages.
+
+    :param name: Logger name.
+    :param remote_ip: If defined, log output will be logged to a remote server.
+    :param remote_port: Port on remote server to send log messages to.
+
+    :return: An instance of ``logging.Logger``.
+    """
+    new_logger = logging.Logger(name)
+
+    level = logging.DEBUG if show_debug else logging.INFO
+    new_logger.setLevel(level)
+    
+    fmt_str = "[%(asctime)s] [%(levelname)s] <%(threadName)s>: %(message)s"
+    formatter = logging.Formatter(fmt=fmt_str, datefmt="%I:%M:%S")
+
+    stream = logging.StreamHandler()
+    stream.setLevel(level)
+    stream.setFormatter(formatter)
+    
+    new_logger.addHandler(stream)
+
+    if remote_ip:
+        remote_handler = DatagramHandler('127.0.0.1', 1999)
+        

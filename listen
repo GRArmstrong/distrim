@@ -1,0 +1,12 @@
+#!/bin/bash
+
+# Ensure we're in the Product directory
+cd "$( dirname "${BASH_SOURCE[0]}" )"
+cd ./tools
+
+if [ -z $1 ]
+then
+  python ./log_listener.py 127.0.0.1 1999
+else
+  python ./log_listener.py $*
+fi
