@@ -16,14 +16,15 @@
 
 """
     Entry point to DistrIM, this should be executed on the command line within
-    the Python environment. 
+    the Python environment.
 """
 
 
 import argparse
 
-from distrim.node import Node
+from distrim.ui_cl import CommandLineInterface
 from distrim.assets.text import CMD_DESCRIPTION, CMD_EPILOG
+from distrim.utils.utilities import get_local_ip
 
 
 def init():
@@ -40,21 +41,18 @@ def init():
         formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('remote_ip', help='IP of bootstrap node')
     parser.add_argument('remote_port', help='Listening port of remote node')
-    
+
     args = parser.parse_args()
-    
-    node = Node()
-    node.start()
 
-    while True:
-        option = raw_input("DistrIM> ")
-        if option.lower() in ['quit', 'exit']:
-            break
-        node.run_command(option)
+    local_ip = get_local_ip()
+    if not local_ip:
+        print "IP Address of this node could not be determined."
+        local_ip = raw_input("IP of node: ")
 
-    print "Exiting..."
-    node.destroy()
-    print "Node stopped, end."
+    cli = CommandLineInterface()
+    cli.enter()
+    # Remains in enter() loop until program exit
+    print "End, program exit."
 
 
 # Program entry point
