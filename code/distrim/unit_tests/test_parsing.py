@@ -23,7 +23,7 @@
 
 import unittest
 
-from ..main_distrim import parse_ip       
+from ..main_distrim import parse_ip
 
 
 class InitTesting(unittest.TestCase):
