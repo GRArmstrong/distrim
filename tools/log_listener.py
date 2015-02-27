@@ -15,7 +15,7 @@
 
 
 """
-    Log listener, outputs log messages from multiple nodes.
+    Log listener, outputs log messages from multiple nodes across LAN.
 """
 
 

@@ -24,11 +24,7 @@ import logging
 from logging.handlers import DatagramHandler
 
 
-def log(string, *args):
-    #TODO: Replace with actual logger
-    print string % args
-
-def create_logger(name, remote_ip='', remote_port=3001, show_debug=True):
+def create_logger(name, remote_ip='', remote_port=1999, show_debug=True):
     """
     Spawns a Python logger to output application messages.
 
@@ -53,5 +49,7 @@ def create_logger(name, remote_ip='', remote_port=3001, show_debug=True):
     new_logger.addHandler(stream)
 
     if remote_ip:
-        remote_handler = DatagramHandler('127.0.0.1', 1999)
-        
+        remote_handler = DatagramHandler(remote_ip, remote_port)
+        new_logger.addHandler(remote_handler)
+
+    return new_logger

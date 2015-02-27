@@ -21,7 +21,6 @@
 
 from netifaces import gateways, interfaces, ifaddresses, AF_INET
 
-from .logger import log
 from ..assets.errors import InvalidIPAddressError, NetInterfaceError
 
 
