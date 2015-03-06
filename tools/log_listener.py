@@ -63,7 +63,7 @@ def listen(addr, port, show_debug=False):
 
     log = logging.getLogger()
 
-    fmt_str = (" %(addr)s | [%(asctime)s] [%(levelname)s] "
+    fmt_str = (" %(ident)s | [%(asctime)s] [%(levelname)s] "
                "<%(threadName)s>: %(message)s")
     formatter = logging.Formatter(fmt=fmt_str, datefmt="%I:%M:%S")
 
@@ -81,13 +81,13 @@ def listen(addr, port, show_debug=False):
         #print '*', data[:4], '*'
         data_length = struct.unpack(">L", data[:4])[0]
         try:
-            obj = cPickle.loads(data[4:data_length + 4])
+            record_terms = cPickle.loads(data[4:data_length + 4])
         except EOFError:
             print(" !!! Logging error, failed to receive message from %s"
                   % (addr[0]))
             continue
-        record = logging.makeLogRecord(obj)
-        record.addr = addr[0]
+        record = logging.makeLogRecord(record_terms)
+#        record.addr = addr[0]
         log.handle(record)
         # print addr, record
 
