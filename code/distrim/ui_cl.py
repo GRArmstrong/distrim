@@ -18,12 +18,15 @@
     Command Line User Interface
 """
 
+import traceback
 
 from .node import Node
+from .utils.utilities import get_local_ip
 
 
 COMMANDS = [
     (('help', 'h'), "Print this message."),
+    (('print', 'p'), "Print some information."),
     (('send', 's'), "Send message to node."),
     (('quit', 'q'), "Stop this node and exit."),
 ]
@@ -31,11 +34,12 @@ COMMANDS = [
 
 class CommandLineInterface(object):
 
-    def __init__(self):
-        self.node = Node()
+    def __init__(self, node_params):
+        self.node = Node(**node_params)
         self.prompt = "> "
         self._handlers = {
             'help': self.cmd_help,
+            'print': self.cmd_print,
             'send': self.cmd_send,
             'quit': self.cmd_quit,
         }
@@ -58,6 +62,8 @@ class CommandLineInterface(object):
             self.exec_command(command)
         except KeyboardInterrupt:
             print "\n *** KeyboardInterrupt: Command interrupted! ***"
+        except Exception:
+            print traceback.format_exc()
 
     def get_command(self):
         """
@@ -94,15 +100,71 @@ class CommandLineInterface(object):
         return comm, None, None
 
     # ========== Command Handlers ==========
-    def cmd_quit(self, params):
-        print "Shutting down..."
-        self.node.stop()
-        self.running = False
-
     def cmd_help(self, params):
         print "DistrIM Commands"
         for (longname, shortname), descrption in COMMANDS:
             print "\t%s, \t%s: \t%s" % (longname, shortname, descrption)
 
+    def cmd_print(self, params):
+        options = ['crypto-keys', 'fingers', 'node-info', 'node-stats']
+        if not params.lower() in options:
+            if params:
+                print "No such option '%s'" % (params,)
+            print "\033[1mPossible options:\033[0m\n ", '\n  '.join(options)
+
+        params = params.lower()
+
+        if params == 'crypto-keys':
+            print "\033[1mNode Keys...\033[0m"
+            print self.node.crypto_key.exportKey()
+            print self.node.public_key.exportKey()
+
+        if params == 'fingers':
+            print "\033[1mFinger Table...\033[0m"
+            fingers = self.node.finger_table.get_all()
+            for ident, finger in fingers.iteritems():
+                print " %s) %s:%d" % (ident, finger.addr, finger.port)
+
+        if params == 'node-info':
+            finger = self.node.finger
+            print "\033[1mNode Information...\033[0m"
+            print "    Hash:", finger.ident 
+            print " Node IP:", "%s:%d" % (finger.addr, finger.port)
+
+        if params == 'node-stats':
+            print 'To be implemented...'
+
+
     def cmd_send(self, params):
+        print 'To be implemented...'
         raise NotImplementedError
+
+    def cmd_quit(self, params):
+        print "Shutting down..."
+        self.node.stop()
+        self.running = False
+
+
+def run_application(args):
+    """
+    Entry point for the program.
+
+    Initiates the application and fetches any configuration from the program
+    arguments.
+    """
+
+    local_ip = get_local_ip()
+    if not local_ip:
+        print "WARNING: IP Address of this node could not be determined."
+        local_ip = raw_input("IP of this node: ")
+
+    params = {'local_ip': local_ip}
+    if args.get('listen_on'):
+        params['local_port'] = args['listen_on']
+    if args.get('bootstrap'):
+        params['remote_ip'], params['remote_port'] = args['bootstrap']
+    if args.get('logger'):
+        params['log_ip'], params['log_port'] = args['logger']
+
+    cli = CommandLineInterface(params)
+    cli.enter()

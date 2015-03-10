@@ -19,40 +19,50 @@
     the Python environment.
 """
 
-
 import argparse
-
-from distrim.ui_cl import CommandLineInterface
+from distrim.ui_cl import run_application
 from distrim.assets.text import CMD_DESCRIPTION, CMD_EPILOG
-from distrim.utils.utilities import get_local_ip
+
+
+def split_address(address):
+    """
+    Transform IPv4 address and port into a `string` and `int` tuple.
+    """
+    parts = address.partition(':')
+
+    if not parts[1]:
+        msg = ("Address '%s' must be in format 'xxx.xxx.xxx.xxx:nnnn'"
+               % (address,))
+        raise argparse.ArgumentTypeError(msg)
+    try:
+        vals = parts[0], int(parts[2])
+        return vals
+    except ValueError:
+        msg = ("'%s' is not a valid integer in address '%s'"
+               % (parts[2], address))
+        raise argparse.ArgumentTypeError(msg)
 
 
 def init():
     """
-    Entry point for the program.
+    Entry point for the DistrIM application.
 
-    Initiates the application and fetches any configuration from the program
-    arguments.
+    Takes arguments from the command line and creates a Command Line Interface
+    with a DistrIM node.
     """
-
     # ArgParse docs: https://docs.python.org/dev/library/argparse.html
     parser = argparse.ArgumentParser(
         description=CMD_DESCRIPTION, epilog=CMD_EPILOG,
         formatter_class=argparse.RawTextHelpFormatter)
-    parser.add_argument('remote_ip', help='IP of bootstrap node')
-    parser.add_argument('remote_port', help='Listening port of remote node')
+    parser.add_argument('-p', '--listen-on', type=int,
+                        help='listening port for this node')
+    parser.add_argument('-b', '--bootstrap', type=split_address,
+                        help='Address for a bootstrap node in form IP:Port.')
+    parser.add_argument('-l', '--logger', type=split_address,
+                        help='Address for a remote logger in form IP:Port.')
 
     args = parser.parse_args()
-
-    local_ip = get_local_ip()
-    if not local_ip:
-        print "IP Address of this node could not be determined."
-        local_ip = raw_input("IP of node: ")
-
-    cli = CommandLineInterface()
-    cli.enter()
-    # Remains in enter() loop until program exit
-    print "End, program exit."
+    run_application(args.__dict__)
 
 
 # Program entry point
