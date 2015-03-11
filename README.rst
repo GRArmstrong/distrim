@@ -44,3 +44,7 @@ Usage
 Begin execution with the following command:
 
   $ ./run
+
+For assistance with parameters, try using the **-h** flag.
+
+  $ ./run -h
