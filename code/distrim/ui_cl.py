@@ -130,6 +130,8 @@ class CommandLineInterface(object):
             print "\033[1mNode Information...\033[0m"
             print "    Hash:", finger.ident 
             print " Node IP:", "%s:%d" % (finger.addr, finger.port)
+            pubkey = finger.get_cipher().exportKey()
+            print " Pub-Key:", pubkey.replace('\n', '\n' + ' ' * 10)
 
         if params == 'node-stats':
             print 'To be implemented...'
@@ -151,8 +153,9 @@ def run_application(args):
 
     Initiates the application and fetches any configuration from the program
     arguments.
-    """
 
+    :param args: Arguments collected by :module:`argparse`.
+    """
     local_ip = get_local_ip()
     if not local_ip:
         print "WARNING: IP Address of this node could not be determined."
@@ -162,9 +165,13 @@ def run_application(args):
     if args.get('listen_on'):
         params['local_port'] = args['listen_on']
     if args.get('bootstrap'):
-        params['remote_ip'], params['remote_port'] = args['bootstrap']
+        params['remote_ip'] = args['bootstrap'][0]
+        if args['bootstrap'][1]:
+            params['remote_port'] = args['bootstrap'][1]
     if args.get('logger'):
-        params['log_ip'], params['log_port'] = args['logger']
+        params['log_ip'] = args['logger'][0]
+        if args['logger'][1]:
+            params['log_port'] = args['logger'][1]
 
     cli = CommandLineInterface(params)
     cli.enter()

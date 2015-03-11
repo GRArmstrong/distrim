@@ -19,29 +19,47 @@
 """
 
 
-from .connections import ConnectionsManager
+from Crypto.PublicKey import RSA
 
-from .utils.config import CFG
-from .utils.logger import log
+from .connections import ConnectionsManager
+from .fingerspace import Finger, FingerSpace
+
+from .utils.config import CFG_LISTENING_PORT, CFG_LOGGER_PORT, CFG_KEY_LENGTH
+from .utils.logger import create_logger
 from .utils.utilities import get_local_ip
 
 
 class Node(object):
 
-    def __init__(self, local_ip=''):
+    def __init__(self, local_ip, local_port=CFG_LISTENING_PORT,
+                 remote_ip='', remote_port=0, log_ip='',
+                 log_port=CFG_LOGGER_PORT):
         """
-        Entry point for the program.
+        A node within the peer-to-peer network.
 
-        Initiates the application with the parameters passed in.
+        :param local_ip: IP address of this node.
+        :param local_port: Listening port of this node.
+        :param remote_ip: IP address of a remote note to bootstrap against.
+        :param remote_port: Listening port of the remote node.
+        :param log_ip: IP address of a remote logger.
+        :param log_port: Port of the remote logger.
         """
-        print "__name__", __name__
-        if not local_ip:
-            local_ip = get_local_ip()
+        self.connections_manager = ConnectionsManager(local_ip, local_port)
 
-        log("Node IP address: %s" % (local_ip,))
-        self.connections_manager = ConnectionsManager(CFG['localhost'],
-                                                      CFG['listening_port'])
+        # Cryptographic Settings
         #https://pythonhosted.org/pycrypto/
+        self.crypto_key = RSA.generate(CFG_KEY_LENGTH)
+        self.public_key = self.crypto_key.publickey()
+
+        # Identity
+        self.finger = Finger(local_ip, local_port,
+                             self.public_key.exportKey(format='DER'))
+
+        # Get Logging!
+        #__name__ is distrim.node
+        self.log = create_logger(__name__, log_ip, log_port,
+                                 ident=self.finger.ident)
+        self.log.info("Node IP address: %s" % (local_ip,))
 
     def start(self):
         #self.server.start()
@@ -56,11 +74,11 @@ class Node(object):
     def destroy(self):
         pass
 
+    def send_message(self, recipient, message):
+        """
+        Do the thing
+        """
+        raise NotImplementedError
+        #msg = 
 
 
-
-class Message(object):
-
-    def __init__(self, message_type, payload):
-        self.message_type = message_type
-        self.payload = payload

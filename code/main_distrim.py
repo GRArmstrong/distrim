@@ -20,27 +20,10 @@
 """
 
 import argparse
+
 from distrim.ui_cl import run_application
 from distrim.assets.text import CMD_DESCRIPTION, CMD_EPILOG
-
-
-def split_address(address):
-    """
-    Transform IPv4 address and port into a `string` and `int` tuple.
-    """
-    parts = address.partition(':')
-
-    if not parts[1]:
-        msg = ("Address '%s' must be in format 'xxx.xxx.xxx.xxx:nnnn'"
-               % (address,))
-        raise argparse.ArgumentTypeError(msg)
-    try:
-        vals = parts[0], int(parts[2])
-        return vals
-    except ValueError:
-        msg = ("'%s' is not a valid integer in address '%s'"
-               % (parts[2], address))
-        raise argparse.ArgumentTypeError(msg)
+from distrim.utils.utilities import split_address
 
 
 def init():
