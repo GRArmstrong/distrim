@@ -19,8 +19,13 @@
 """
 
 
+from os import urandom
+from random import randint
+from argparse import ArgumentTypeError
+
 from netifaces import gateways, interfaces, ifaddresses, AF_INET
 
+from .config import CFG_SALT_LEN_MIN, CFG_SALT_LEN_MAX
 from ..assets.errors import InvalidIPAddressError, NetInterfaceError
 
 
@@ -50,6 +55,26 @@ def parse_ip(str_ip):
     return ip_address, int(port)
 
 
+def split_address(address):
+    """
+    Transform IPv4 address and port into a `string` and `int` tuple.
+
+    :param address: The string format of the input address.
+    :return: tuple of string of the IP or hostname, and port as an int. 
+    """
+    parts = address.partition(':')
+
+    if not parts[1]:
+        return parts[0], None
+    try:
+        vals = parts[0], int(parts[2])
+        return vals
+    except ValueError:
+        msg = ("'%s' is not a valid integer in address '%s'"
+               % (parts[2], address))
+        raise ArgumentTypeError(msg)
+
+
 def get_local_ip(address_type=AF_INET):
     """
     Determine local IP address of node from its interface IP.
@@ -66,3 +91,29 @@ def get_local_ip(address_type=AF_INET):
     for addresses in ifaddresses(interface).get(address_type):
         if addresses.get('addr')[:3] == gateway_ip[:3]:
             return addresses.get('addr')
+
+
+def generate_padding(min_length=CFG_SALT_LEN_MIN, max_length=CFG_SALT_LEN_MAX):
+    """
+    Create a padding string for use in a cryptographic message
+
+    Generate a random string, of random characters, of a random length for
+    padding secure messages.
+
+    :param min_length: Minimum length of the padding.
+    :param max_length: Maximum length of the padding.
+    :return: The padding.
+    """
+    return urandom(randint(min_length, max_length))
+
+
+def split_chunks(seq, part_size=128):
+    """
+    Split a sequence into parts.
+
+    :param seq: The sequence to split.
+    :param part_size: Size of the parts.
+    :return: Generator function 
+    """
+    for idx in xrange(0, len(seq), part_size):
+        yield seq[idx:idx+part_size]

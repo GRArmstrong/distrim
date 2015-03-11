@@ -14,24 +14,22 @@
 ## at the University of Northumbria at Newcastle.
 
 """
-    Configuration
+    Default DistrIM Configuration
 """
 
-DATA = 5
+# Node
+CFG_LISTENING_PORT = 2000
+CFG_THREAD_POOL_LENGTH = 8
+CFG_KEY_LENGTH = 1024
 
-def genconf():
-    global DATA
-    DATA += 1
-    return "Generated Config %d" % (DATA,)
+# Protocol
+CFG_PICKLE_PROTOCOL = 2
+CFG_STRUCT_FMT = ">L"
+CFG_CRYPT_CHUNK_SIZE = 128
 
+# Salting
+CFG_SALT_LEN_MIN = 64
+CFG_SALT_LEN_MAX = 512
 
-VALUE = genconf()
-
-
-
-CFG = {
-    'localhost': "127.0.0.1",
-    'listening_port': 2000,
-    'listening_queue': 5,
-    'thread_pool_length': 8,
-}
+# Logging
+CFG_LOGGER_PORT = 1999
