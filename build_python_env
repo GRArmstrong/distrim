@@ -1,0 +1,50 @@
+#!/bin/bash
+
+# Ensure we're in the Product directory
+cd "$( dirname "${BASH_SOURCE[0]}" )"
+
+export WORKON_HOME="/tmp/virtual-envs/"
+
+ENV_NAME="11004764-cm0645"
+
+function dienow {
+	echo "SCRIPT EXITING"
+	exit 1
+}
+
+trap dienow SIGINT
+
+# Need Python to do anything!
+command -v python >/dev/null 2>&1 || {
+	echo "ALERT: No Python installed, fix that first!" >&2;
+	sudo apt-get update; sudo apt-get install build-essential python
+}
+
+# Need pip to install stuff
+command -v pip >/dev/null 2>&1 || {
+	echo "ALERT: Must install PIP." >&2;
+	sudo apt-get install python-pip python-dev;
+	sudo pip install --upgrade pip 
+	sudo pip install --upgrade virtualenv 
+}
+
+# Need virtualenv to install dependencies
+command -v virtualenv >/dev/null 2>&1 || {
+	echo "ALERT: Must install python-virtualenv package." >&2;
+	sudo apt-get install python-pip python-dev python-virtualenv;
+}
+
+# Setup VirtualEnv
+virtualenv "/tmp/$ENV_NAME"
+chmod +x "/tmp/$ENV_NAME/bin/activate"
+source "/tmp/$ENV_NAME/bin/activate"
+
+# Install packages
+pip install -r requirements.txt
+
+# Done
+echo "------------------------------------------------------------------"
+echo "Setup Completed! (Hopefully without errors)"
+echo "Execute to enter virtualenv:"
+echo " $ source /tmp/$ENV_NAME/bin/activate"
+echo "Then $ ./run to start a node"
