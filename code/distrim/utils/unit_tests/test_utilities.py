@@ -26,7 +26,8 @@ import unittest
 from argparse import ArgumentTypeError
 from ...assets.errors import InvalidIPAddressError
 
-from ..utilities import parse_ip, split_address, generate_padding, split_chunks
+from ..utilities import (parse_ip, split_address, generate_padding,
+                         split_chunks, format_elapsed)
 
 
 class TestParseIP(unittest.TestCase):
@@ -81,3 +82,21 @@ class TestSplitChunks(unittest.TestCase):
         for result in split_chunks(test, 5):
             results.append(result)
         self.assertListEqual(results, expected)
+
+class TestSplitChunks(unittest.TestCase):
+    """Test timedelta utility function :func:`format_elapsed`"""
+    def test_format(self):
+        """Test it formats correctly"""
+        from datetime import timedelta
+
+        # days, seconds, microseconds, milliseconds, minutes, hours
+        test_cases = [
+            ((0, 34, 0, 0, 15, 0), "0h 15m 34s"),
+            ((0, 0, 0, 0, 0, 0), "0h 0m 0s"),
+            ((1, 0, 0, 0, 0, 0), "1 days, 0h 0m 0s"),
+            ((1, 12, 0, 0, 55, 9), "1 days, 9h 55m 12s"),
+        ]
+
+        for params, expected in test_cases:
+            tdo = timedelta(*params)
+            self.assertEqual(expected, format_elapsed(tdo))

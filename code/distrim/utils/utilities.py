@@ -117,3 +117,14 @@ def split_chunks(seq, part_size=128):
     """
     for idx in xrange(0, len(seq), part_size):
         yield seq[idx:idx+part_size]
+
+def format_elapsed(delta):
+    """
+    Format a :class:`datetime.timedelta` object into a string.
+    """
+    hours, rem_secs = divmod(delta.seconds, 60*60)
+    mins, secs = divmod(rem_secs, 60)
+    if delta.days:
+        return "%d days, %dh %dm %ds" % (delta.days, hours, mins, secs)
+    else:
+        return "%dh %dm %ds" % (hours, mins, secs)
