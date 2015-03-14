@@ -1,10 +1,2 @@
-#dev
-pylint
+# Development Tools
 ipython
-pytest
-#docs
-sphinx
-Jinja2
-Pygments
-docutils
-markupsafe

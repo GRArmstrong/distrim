@@ -1,6 +1,9 @@
-# Necessary packages for Python environment
-#greenlet
-#gevent
+# Packages for Execution
 thread_pool
 netifaces
 pycrypto
+
+# Packages for Testing
+pylint
+pytest
+mock

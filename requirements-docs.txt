@@ -1,0 +1,6 @@
+# Documentation Requirements
+sphinx
+Jinja2
+Pygments
+docutils
+markupsafe
