@@ -158,7 +158,7 @@ class FingerSpaceTests(unittest.TestCase):
         if not hasattr(self, 'test_node_list'):
             import cPickle as pickle
             test_data_path = (__file__.rpartition('/')[0]
-                              + '/testdata_fingerspace.pickled.bin')
+                              + '/testdata_fingerspace.pickle')
             with open(test_data_path) as hand:
                 self.test_node_list = pickle.load(hand)
 
