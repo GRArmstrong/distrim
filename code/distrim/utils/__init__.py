@@ -14,5 +14,5 @@
 ## at the University of Northumbria at Newcastle.
 
 """
-    Product source code for DistrIM.
+    Utilities used by DistrIM.
 """

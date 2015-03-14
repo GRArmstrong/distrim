@@ -23,7 +23,7 @@ from os import urandom
 from random import randint
 from argparse import ArgumentTypeError
 
-from netifaces import gateways, interfaces, ifaddresses, AF_INET
+from netifaces import gateways, ifaddresses, AF_INET
 
 from .config import CFG_SALT_LEN_MIN, CFG_SALT_LEN_MAX
 from ..assets.errors import InvalidIPAddressError, NetInterfaceError
@@ -60,7 +60,7 @@ def split_address(address):
     Transform IPv4 address and port into a `string` and `int` tuple.
 
     :param address: The string format of the input address.
-    :return: tuple of string of the IP or hostname, and port as an int. 
+    :return: tuple of string of the IP or hostname, and port as an int.
     """
     parts = address.partition(':')
 
@@ -113,10 +113,11 @@ def split_chunks(seq, part_size=128):
 
     :param seq: The sequence to split.
     :param part_size: Size of the parts.
-    :return: Generator function 
+    :return: Generator function that yields chunks.
     """
     for idx in xrange(0, len(seq), part_size):
         yield seq[idx:idx+part_size]
+
 
 def format_elapsed(delta):
     """

@@ -15,7 +15,7 @@
 
 
 """
-    Logging
+    Logging functions for creating Loggers in DistrIM.
 """
 
 

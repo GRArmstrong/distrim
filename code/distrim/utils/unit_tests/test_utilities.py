@@ -31,17 +31,20 @@ from ..utilities import (parse_ip, split_address, generate_padding,
 
 
 class TestParseIP(unittest.TestCase):
-
+    """Tests the Parse IP function"""
     def test_valid_ip(self):
-        self.assertEqual(((192,168,3,4),81), parse_ip("192.168.3.4:81"))
+        """Expect success"""
+        self.assertEqual(((192, 168, 3, 4), 81), parse_ip("192.168.3.4:81"))
 
     def test_invalid_ip(self):
+        """Expect failure"""
         self.assertRaises(InvalidIPAddressError, parse_ip, "192.999.0.1:82")
 
 
 class TestAddressSplit(unittest.TestCase):
-
+    """Tests the address split function"""
     def test_valid(self):
+        """Expect success"""
         valid_tests = [
             ("localhost", ("localhost", None)),
             ("192.168.0.6", ("192.168.0.6", None)),
@@ -53,6 +56,7 @@ class TestAddressSplit(unittest.TestCase):
             self.assertEqual(split_address(test_data), expected)
 
     def test_invalid(self):
+        """Expect failure"""
         invalid_tests = [
             "barry:brought:bacon",
             "192.168.0.1:default",
@@ -60,12 +64,13 @@ class TestAddressSplit(unittest.TestCase):
             "hostname:"
         ]
         for test_data in invalid_tests:
-            self.assertRaises(ArgumentTypeError, split_address, test_data)        
+            self.assertRaises(ArgumentTypeError, split_address, test_data)
 
 
 class TestPadding(unittest.TestCase):
-
+    """Tests the padding function"""
     def test_padding(self):
+        """Test the padding function for correct output"""
         len_min = 64
         len_max = 1024
         test_values = [generate_padding() for cnt in xrange(50)]
@@ -73,9 +78,11 @@ class TestPadding(unittest.TestCase):
             self.assertGreaterEqual(len(value), len_min)
             self.assertLessEqual(len(value), len_max)
 
-class TestSplitChunks(unittest.TestCase):
 
+class TestSplitChunks(unittest.TestCase):
+    """Tests the split chunks function"""
     def test_split(self):
+        """Expect success"""
         test = "This string will be split."
         expected = ["This ", "strin", "g wil", "l be ", "split", "."]
         results = []
@@ -83,7 +90,8 @@ class TestSplitChunks(unittest.TestCase):
             results.append(result)
         self.assertListEqual(results, expected)
 
-class TestSplitChunks(unittest.TestCase):
+
+class TestTimeDeltaFormat(unittest.TestCase):
     """Test timedelta utility function :func:`format_elapsed`"""
     def test_format(self):
         """Test it formats correctly"""

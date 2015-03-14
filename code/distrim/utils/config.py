@@ -15,7 +15,7 @@
 
 
 """
-    Default DistrIM Configuration and Constants
+    Default DistrIM Configuration and Constants.
 """
 
 
