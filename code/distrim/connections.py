@@ -15,28 +15,58 @@
 
 
 """
-    Connections Manager,
+    Connections Manager
 """
+
 
 import socket
 
+from time import sleep
 from threading import Thread
 from thread_pool import ThreadPool
 
-from .utils.config import CFG
-from .utils.logger import log
+from .utils.config import CFG_THREAD_POOL_LENGTH, CFG_LISTENING_QUEUE
 
 
 class ConnectionsManager(object):
-
+    """
+    The ConnectionsManager class is responsible for all incoming connections
+    from other nodes.
+    """
     def __init__(self, localhost, port):
-        self.localhost = localhost
+        self.local_ip = localhost
         self.port = port
-        self.listener = Listener(self, localhost, port)
-        self.pool = ThreadPool(CFG['thread_pool_length'])
+        self._pool = ThreadPool(CFG_THREAD_POOL_LENGTH)
+
+        # Listener
+        self._thread = Thread(target=self._listen, name='Thread-Listener')
+        self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        # Cleaner
+        self._cleaner = Thread(target=self._cleaning, name='Thread-Cleaner')
+
+        # Some nice stats, because why not
+        self.count_conn_success = 0
+        self.count_conn_failure = 0
 
     def start(self):
-        self.listener.start()
+        self.sock.bind((self.localhost, self.port))
+        self.sock.listen(CFG_LISTENING_QUEUE)
+        log.info("Listening for connections on %s:%d", self.localhost,
+                 self.port)
+        self._running = True
+        self._thread.start()
+        self._cleaner.start()
+
+    def stop(self):
+        self._sock.shutdown(socket.SHUT_RD)
+        self._running = False
+
+    def pool_new_connection(self, sock, address):
+        """
+        Handle incoming connection, puts socket into seperate thread.
+        """
+        self._pool.add_task(self.accept_new_connetion, sock, address)
 
     def accept_new_connetion(self, sock, address):
         """
@@ -47,63 +77,49 @@ class ConnectionsManager(object):
         """
         # Needham–Schroeder–Lowe
         # Connection Procedure, handshake
-        data_in = read_socket(sock)
-
-
-class Listener(object):
-
-    def __init__(self, manager, localhost, port):
-        self.manager = manager
-        self.localhost = localhost
-        self.port = port
-        self.thread = Thread(target=self._listen, name='Thread-Listener')
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-    def start(self):
-        self._bind_and_listen()
-        log("Listening for connections on %s:%d", self.localhost, self.port)
-        self.running = True
-        self.thread.start()
-
-    def stop(self):
-        # Stop accepting incoming connections
-        self.socket.shutdown(socket.SHUT_RD)
-        self.running = False
-
-    def _bind_and_listen(self):
-        """
-        Bind socket to listening address
-
-        """
-        self.sock.bind((self.localhost, self.port))
-        self.listen(CFG['listening_queue'])
+        # data_in = read_socket(sock)
+        try:
+            # TODO: Stuff
+            sock.close()
+        except Exception as exc:
+            self.log.error("Exception occured during connection with %s:\n%s",
+                           address, exc.message)
+            return False
+        return True
 
     def _listen(self):
         """
         Listen for incoming connections.
 
-        This method is the target of `self.thread`
+        This method is the target of `self._thread`
         """
-        while self.running:
-            sock, addr = self.socket.accept()
-            self.manager.accept_new_connetion(sock, addr)
+        while self._running:
+            sock, addr = self.sock.accept()
+            self.pool_new_connection(sock, addr)
 
-        self.socket.close()
+        self.sock.close()
+        self.log.debug("Listening thread stopped.")
+
+    def _cleaning(self):
+        """
+        Removes completed connection results from the thread pool.
+
+        This method is the target of `self._cleaner`
+        """
+        while self._running:
+            result = self._pool.get_task()
+            if result:
+                self.count_conn_success += 1
+            else:
+                self.count_conn_failure += 1
+
+            # It'll be satisfactory for the time being to pend on get_task
+            # Hopefully errors will be rare
+            try:
+                while not self._pool.err_queue.empty():
+                    self._pool.err_queue.get_nowait()
+            except Exception:
+                pass
+        self.log.debug("Cleaning thread stopped.")
 
 
-
-def read_socket(socket, read_length=1024):
-    """
-    Read data from a socket.
-
-    :param socket: The socket object to read from.
-    :param read_length: How many bytes to read at a time.
-    """
-    received_data = []
-    while True:
-        stream_out = socket.recv(read_length)
-        if stream_out:
-            received_data.append(stream_out)
-        else:
-            break
-    return received_data.join('')
