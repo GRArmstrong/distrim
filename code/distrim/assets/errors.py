@@ -31,10 +31,16 @@ class HashMissmatchError(Exception):
 
     def __init__(self, addr, port, hash_gen, hash_bad):
         super(HashMissmatchError, self).__init__(
-            "%s:%d == %s, not %s" % (addr, port, hash_gen, hash_bad))
+            "%s:%d == %s, but given %s." % (addr, port, hash_gen, hash_bad))
+
 
 class FingerSpaceError(ValueError):
     pass
 
+
 class ProtocolError(Exception):
-    pass
+    """Raised during communications if invalid data is sent or received."""
+
+
+class FingerError(Exception):
+    """Raised by creating a finger with invalid data"""
