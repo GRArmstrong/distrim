@@ -13,13 +13,20 @@
 ## governing the award of the Degree of BSc (Honours) Computer Science
 ## at the University of Northumbria at Newcastle.
 
+
 """
-    Default DistrIM Configuration
+    Default DistrIM Configuration and Constants
 """
+
 
 # Node
 CFG_LISTENING_PORT = 2000
+
+# Connection Manager
+CFG_LISTENING_QUEUE = 8
 CFG_THREAD_POOL_LENGTH = 8
+
+# Crypto
 CFG_KEY_LENGTH = 1024
 
 # Protocol

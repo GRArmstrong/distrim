@@ -48,12 +48,12 @@ class SocketWrapper(object):
     """
     Interface for communicating with foreign nodes.
 
-    This class wraps around a :class:`socket` object that is initialised and
-    connected to a foreign node. Messages can be sent between the local node
-    and the foreign node through an instance of this class. The instance will
-    take care of pickling and encrypting the messages.
+    This class wraps around a :class:`socket.socket` object that is initialised
+    and connected to a foreign node. Messages can be sent between the local
+    node  and the foreign node through an instance of this class. The instance
+    will take care of pickling and encrypting the messages.
 
-    Pickled messages are created with the :module:`cPickle` module, the first
+    Pickled messages are created with the *cPickle* module, the first
     four bytes of a pickled message represent the length of the string
     representing the pickled object.
 
