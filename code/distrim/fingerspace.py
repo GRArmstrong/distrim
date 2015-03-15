@@ -19,6 +19,7 @@
 """
 
 import random
+import socket
 
 from hashlib import md5
 from threading import Semaphore
@@ -26,22 +27,29 @@ from Crypto.PublicKey import RSA
 
 from .assets.errors import (HashMissmatchError, FingerSpaceError,
                             FingerError)
+from .utils.utilities import CipherWrap
+from .utils.config import CFG_TIMEOUT
 
 
 class Finger(object):
     """
-    A container class that represents the information identifying a particular
-    Node in the network.
+    Contains identifying information unique to a single node.
 
-    Three attributes are stored:
+    This class represents the information identifying a particular Node in the
+    network. Provides some functionalty for connecting and communicating with
+    the node.
+
+    Four attributes are stored:
+     - The ident of the node.
      - The IP address of the node.
      - The listening port of node.
      - The public key of the node.
 
     These are the attributes needed for communication between nodes.
 
-    On instantiation, an optional identifier value can also be passed in which
-    is tested to ensure authenticity.
+    On instantiation, an optional identifier value can also be passed in; the
+    ident is calculated anyway but if given then it can be validated for
+    authenticity.
     """
     def __init__(self, ip_address, listening_port, public_key, ident=''):
         """
@@ -54,10 +62,14 @@ class Finger(object):
         if ident and (ident != new_ident):
             raise HashMissmatchError(ip_address, listening_port,
                                      new_ident, ident)
-        self.ident = new_ident
         self.addr = ip_address
         self.port = listening_port
         self.key = public_key
+        self.ident = new_ident
+        # Combined values
+        self.address = (self.addr, self.port)
+        self.values = (self.addr, self.port, self.key)
+        self.all = (self.addr, self.port, self.key, self.ident)
 
     def __eq__(self, other):
         """
@@ -65,27 +77,19 @@ class Finger(object):
 
         :param other: The other finger.
         """
-        if type(other) is not Finger:
-            return False
-
-        try:
-            if self.ident == other.ident \
-               and self.addr == other.addr \
-               and self.port == other.port \
-               and self.key == other.key:
-                return True
-        except Exception:
-            pass
+        # Type check, attribute check
+        if isinstance(other, Finger) and self.__dict__ == other.__dict__:
+            return True
         return False
 
-
-    def get_connection_info(self):
+    def get_socket(self):
         """
-        Fetch IP address and listening port of this finger.
-
-        :return: IP address, and Listening Port.
+        Get a socket object connected to this node.
         """
-        return self.addr, self.port
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(CFG_TIMEOUT)
+        sock.connect(self.address)
+        return sock
 
     def get_cipher(self):
         """
@@ -95,7 +99,7 @@ class Finger(object):
 
         :return: RSA Public Key instance.
         """
-        return RSA.importKey(self.key)
+        return CipherWrap(self.key)
 
 
 class FingerSpace(object):
@@ -103,11 +107,25 @@ class FingerSpace(object):
     The FingerSpace class is responsible for storing information about nodes.
     Access to the Key Space is managed through this class.
     """
-    def __init__(self):
-        """No parameters are needed"""
+    def __init__(self, parent_log, local_finger):
+        """
+        :param parent_log: logger object from Node instance.
+        :param local_finger: The finger for this node.
+        """
+        self.log = parent_log.getChild(__name__.rpartition('.')[2])
+        self.local_finger = local_finger
         self.access = Semaphore()
         self._keyspace = {}
         random.seed()
+
+        # Some nice stats
+        self.count_added = 0
+        self.count_removed = 0
+
+    def __len__(self):
+        """FingerSpace length, the number of keys stored"""
+        with self.access:
+            return len(self._keyspace)
 
     def get(self, ident):
         """
@@ -132,20 +150,35 @@ class FingerSpace(object):
         :param listening_port: Listening port of the node.
         :param public_key: Public Key of the node in binary format.
         """
-        new_finger = Finger(ip_address, listening_port,
-                            public_key, existing_ident)
+        finger = Finger(ip_address, listening_port,
+                        public_key, existing_ident)
+
+        if self.local_finger == finger:
+            self.log.warning("Can't place local finger in FingerSpace")
+            return
+
+        ident = h2i(finger.ident)
         with self.access:
-            self._keyspace[h2i(new_finger.ident)] = new_finger
+            if ident not in self._keyspace:
+                self._keyspace[ident] = finger
+                self.count_added += 1
+            else:
+                if not self._keyspace[ident] == finger:
+                    self.log.warning(
+                        "Attempted adding non-matching finger with matching "
+                        + "ident %s.", finger.ident)
 
     def remove(self, ident):
         """
         Delete a Node Finger from the FingerSpace
 
         :param ident: ident of the Finger to remove.
+        :return: True if succesfully removed, false if otherwise.
         """
         try:
             with self.access:
                 self._keyspace.pop(h2i(ident))
+            self.count_removed += 1
             return True
         except KeyError:
             return False
@@ -210,11 +243,11 @@ def finger_type_test(ip_address, listening_port, public_key):
         exception.
     """
     # Test Types
-    if type(ip_address) is not str:
+    if not isinstance(ip_address, str):
         raise FingerError("ip_address must be a string")
-    if type(listening_port) is not int:
+    if not isinstance(listening_port, int):
         raise FingerError("listening_port must be an int")
-    if type(public_key) is not str:
+    if not isinstance(public_key, str):
         raise FingerError("public_key must be a string")
 
     # Test values

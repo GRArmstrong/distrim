@@ -21,8 +21,11 @@
 
 
 import unittest
-
 import itertools
+import socket
+
+from threading import Thread
+from mock import Mock
 from Crypto.PublicKey import RSA
 
 from ..fingerspace import (FingerSpace, Finger, generate_hash,
@@ -150,25 +153,89 @@ class FingerTests(unittest.TestCase):
         self.assertRaises(HashMissmatchError, Finger, '192.168.0.1',
                           2050, pubkey, 'Invalid Hash')
 
+    def test_get_cipher(self):
+        """Tests the :func:`get_cipher` method :class:`Finger`"""
+        keys = RSA.generate(1024)
+        pubkey = keys.publickey().exportKey(format='DER')
+        obj = Finger('192.168.0.1', 2000, pubkey)
+
+        test_data = "This is a beep boop"
+        cipher = obj.get_cipher()
+        enc_data = cipher.encrypt(test_data)
+        self.assertEqual(keys.decrypt(enc_data), test_data)
+
+
+class FingerSocketTest(unittest.TestCase):
+    """Tests the :func:`get_socket` method of :class:`Finger`."""
+    def setUp(self):
+        """
+        Setup to execute before each test.
+        """
+        from time import sleep
+        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listener.bind(('localhost', 0))
+        self.listener.listen(0)
+        self.listen_thread = Thread(target=self._listen)
+        self.listen_thread.start()
+
+        sleep(0.1)  # Momentary pause while the listening socket becomes ready
+
+        pubkey = RSA.generate(1024).publickey().exportKey(format='DER')
+        port = self.listener.getsockname()[1]
+        self.finger = Finger('127.0.0.1', port, pubkey)
+
+    def _listen(self):
+        """
+        In a seperate thread, await a connection
+        """
+        self.local, address = self.listener.accept()
+
+    def tearDown(self):
+        """
+        Cleanup after each test.
+        """
+        self.listener.shutdown(socket.SHUT_RDWR)
+        self.listener.close()
+        self.local.shutdown(socket.SHUT_RDWR)
+        self.local.close()
+
+    def test_get_socket(self):
+        """
+        Receive basic data.
+        """
+        sock = self.finger.get_socket()
+        self.listen_thread.join()
+        data = '12345678'
+        sock.sendall(data)
+        self.assertEqual(self.local.recv(8), data)
+        sock.shutdown(socket.SHUT_RDWR)
+        sock.close()
+
 
 class FingerSpaceTests(unittest.TestCase):
     """Tests the FingerSpace class itself"""
     def setUp(self):
         """Load in test data"""
-        if not hasattr(self, 'test_node_list'):
-            import cPickle as pickle
-            test_data_path = (__file__.rpartition('/')[0]
-                              + '/testdata_fingerspace.pickle')
-            with open(test_data_path) as hand:
-                self.test_node_list = pickle.load(hand)
+        import cPickle as pickle
+        test_data_path = (__file__.rpartition('/')[0]
+                          + '/testdata_fingerspace.pickle')
+        with open(test_data_path) as hand:
+            nodes = pickle.load(hand)
+        self.local_finger = Finger(*nodes[0])
+        self.test_node_list = nodes[1:]
+        self.mock_log = Mock()
+
+    def tearDown(self):
+        """Test our mock_log each time"""
+        self.mock_log.getChild.assert_called_with('fingerspace')
 
     def test_init_add(self):
         """Initilise and add data"""
-        fs1 = FingerSpace()
+        fs1 = FingerSpace(self.mock_log, self.local_finger)
         for addr, port, key in self.test_node_list:
             fs1.put(addr, port, key)
 
-        fs2 = FingerSpace()
+        fs2 = FingerSpace(self.mock_log, self.local_finger)
         for addr, port, key in self.test_node_list:
             ident = generate_hash(addr, port, key)
             fs2.put(addr, port, key, ident)
@@ -177,17 +244,46 @@ class FingerSpaceTests(unittest.TestCase):
         """Tests invalid hash error"""
         invalid_hash = "This is an invalid hash"
 
-        fsi = FingerSpace()
+        fsi = FingerSpace(self.mock_log, self.local_finger)
         for addr, port, key in self.test_node_list:
             with self.assertRaises(HashMissmatchError):
                 fsi.put(addr, port, key, invalid_hash)
+
+    def test_add_valid_duplicate(self):
+        """Tests when adding identicle fingers, second is ignored"""
+        fsi = FingerSpace(self.mock_log, self.local_finger)
+        addr, port, key = self.test_node_list[0]
+        self.assertEqual(len(fsi), 0)
+        fsi.put(addr, port, key)
+        self.assertEqual(len(fsi), 1)
+        fsi.put(addr, port, key)
+        self.assertEqual(len(fsi), 1)
+
+    def test_add_invalid_duplicate(self):
+        """Tests when two different fingers have same hash, logs warning"""
+        fsi = FingerSpace(self.mock_log, self.local_finger)
+        addr, port, key = self.test_node_list[0]
+        bad_finger = Finger(addr, port, key)
+        bad_finger.addr = '0.0.0.0'
+        bad_finger.port = 0
+        fsi._keyspace[h2i(bad_finger.ident)] = bad_finger
+        self.assertEqual(fsi.log.warning.call_count, 0)
+        fsi.put(addr, port, key)
+        self.assertEqual(fsi.log.warning.call_count, 1)
+
+    def test_add_self(self):
+        """Tests that it's considered an error """
+        fsi = FingerSpace(self.mock_log, self.local_finger)
+        addr, port, key = self.local_finger.values
+        fsi.put(addr, port, key)
+        self.assertEqual(fsi.log.warning.call_count, 1)
 
     def test_single_finger(self):
         """Tests adding, getting, and removing a Finger"""
         addr, port, key = self.test_node_list[0]
         finger = Finger(addr, port, key)
         ident = finger.ident
-        fsi = FingerSpace()
+        fsi = FingerSpace(self.mock_log, self.local_finger)
 
         fsi.put(addr, port, key)
         self.assertTrue(len(fsi._keyspace.keys()) == 1)
@@ -200,18 +296,18 @@ class FingerSpaceTests(unittest.TestCase):
 
     def test_empty(self):
         """Tests an empty FingerSpace"""
-        fsi = FingerSpace()
+        fsi = FingerSpace(self.mock_log, self.local_finger)
         self.assertEqual(fsi.get('abcd'), None)
         self.assertFalse(fsi.remove('abcd'))
         self.assertRaises(FingerSpaceError, fsi.get_random_fingers, 1)
 
     def test_path(self):
         """Test ability for path creation"""
-        fsi = FingerSpace()
+        fsi = FingerSpace(self.mock_log, self.local_finger)
         for addr, port, key in self.test_node_list:
             fsi.put(addr, port, key)
 
-        lengths = [1, 2, 5, 10, 15]
+        lengths = [1, 2, 5, 10, 14]
         for length in lengths:
             path = fsi.get_random_fingers(length)
             self.assertEqual(len(path), length)
