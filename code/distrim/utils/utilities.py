@@ -23,10 +23,88 @@ from os import urandom
 from random import randint
 from argparse import ArgumentTypeError
 
+from Crypto.PublicKey import RSA
 from netifaces import gateways, ifaddresses, AF_INET
 
 from .config import CFG_SALT_LEN_MIN, CFG_SALT_LEN_MAX
-from ..assets.errors import InvalidIPAddressError, NetInterfaceError
+from ..assets.errors import (InvalidIPAddressError, NetInterfaceError,
+                             CipherError)
+
+
+class CipherWrap(object):
+    """
+    Wrap an RSA Cipher Instance
+    """
+    def __init__(self, cipher):
+        """
+        :param cipher: An RSA key, or an RSA instance.
+        """
+        if isinstance(cipher, basestring):
+            try:
+                self.rsa_instance = RSA.importKey(cipher)
+            except (IndexError, ValueError):
+                raise CipherError("Not a valid cipher string.")
+        elif isinstance(cipher, RSA._RSAobj):
+            self.rsa_instance = cipher
+        else:
+            raise CipherError("Not a valid cipher.")
+        self._has_private = self.rsa_instance.has_private()
+
+    def export(self, text=False, key_type=0):
+        """
+        Export the RSA key as a string.
+
+        By default, this just exports a public key in DER format for use in
+        fingers.
+
+        If the private key is requested when this instance only has a public
+        key, then a :class:`CipherError` is thrown.
+
+        :param text: If True, format the string for humans.
+        :param key_type: Key type to export. If 0, public; if 1, private; if 2,
+            export public and private key.
+        :return: The exported key.
+        """
+        fmt = 'PEM' if text else 'DER'
+        if key_type == 0:
+            return self.rsa_instance.publickey().exportKey(format=fmt)
+        elif key_type == 1:
+            if not self._has_private:
+                raise CipherError("Requested non-existant private key.")
+            return self.rsa_instance.exportKey(format=fmt)
+        elif key_type == 2:
+            if not self._has_private:
+                raise CipherError("Requested non-existant private key.")
+            return (self.rsa_instance.publickey().exportKey(format=fmt),
+                    self.rsa_instance.exportKey(format=fmt))
+        else:
+            raise ValueError("Value for param 'key_type' must be in [0, 1, 2]")
+
+    def encrypt(self, data):
+        """
+        Encrypt a packet of data.
+
+        Note that this data must be a string no longer than 128 bytes.
+
+        :param data: The data to encrypt.
+        :return: The encrypted data.
+        """
+        if not isinstance(data, basestring):
+            raise CipherError("Can only encrypt ")
+        if len(data) > 128:
+            raise CipherError("RSA Can't encrypt longer than 128 bytes")
+        return self.rsa_instance.encrypt(data, None)[0]
+
+    def decrypt(self, data):
+        """
+        Decrypt a packet of data.
+
+        :param data: The data to decrypt.
+        :return: The decrypted data.
+        """
+        if not self._has_private:
+            raise CipherError("Can't decrypt, no private key!")
+        return self.rsa_instance.decrypt(data)
 
 
 def parse_ip(str_ip):
@@ -78,7 +156,6 @@ def split_address(address):
 def get_local_ip(address_type=AF_INET):
     """
     Determine local IP address of node from its interface IP.
-
 
     :param address_type: Any address type from the `AF_*` values in the
         `netifaces` module. Default `AF_INET` for IPv4 addresses.

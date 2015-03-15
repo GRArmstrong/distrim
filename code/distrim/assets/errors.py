@@ -54,3 +54,7 @@ class ProcedureError(ProtocolError):
 
 class FingerError(Exception):
     """Raised by creating a finger with invalid data"""
+
+
+class CipherError(Exception):
+    """Raised by improper use of the CipherWrap class."""
