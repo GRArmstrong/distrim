@@ -24,14 +24,18 @@
 import unittest
 
 import socket
-import struct
-from threading import Thread
+import pickle
 
-from ..protocol import Protocol, SocketWrapper
+from Crypto.PublicKey import RSA
+
+from ..protocol import Protocol, ConnectionHandler
+from ..fingerspace import Finger
+from ..utils.utilities import SocketWrapper, CipherWrap
 from ..assets.errors import ProtocolError
 
-class ProtocolTest(unittest.TestCase):
 
+class ProtocolTest(unittest.TestCase):
+    """Tests the :class:`Protocol` class."""
     def test_protocol_definition(self):
         """
         Sanity test for the class :class:`Protocol`.
@@ -39,7 +43,7 @@ class ProtocolTest(unittest.TestCase):
         # Combine known attributes in the class
         attrs = [attr for attr in dir(Protocol) if not attr.startswith('_')]
         attrs.remove('ALL')
-        attrs.sort()
+        attrs.sort()  # Get Protocol message list alphabetically.
 
         # Create an instance of that class for attribute checking
         proc = Protocol()
@@ -52,7 +56,6 @@ class ProtocolTest(unittest.TestCase):
 
         for idx, attribute in enumerate(attrs):
             value = proc.__getattribute__(attribute)
-            #self.assertIn(value, Protocol.ALL)
             self.assertEqual(Protocol.ALL[idx], value)
             found_attribute_vals.append(value)
             remaining_attributes.remove(attribute)
@@ -66,101 +69,43 @@ class ProtocolTest(unittest.TestCase):
             self.assertIn(attribute, Protocol.ALL)
 
 
-class WrapperTest(unittest.TestCase):
+class MockSock(object):
+    """Emulates a socket object"""
+    def __init__(self):
+        self.data = ''
 
+    def send(self, data):
+        self.data = data
+
+    def receive(self):
+        val = self.data
+        self.data == ''
+        return val
+
+
+class ConnectionHandlerTests(unittest.TestCase):
+    """Test the abstract ConnectionHandler class"""
     def setUp(self):
-        """
-        Setup to execute before each test.
-        """
-        from time import sleep
-        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.listener.bind(('localhost', 0))
-        self.listener.listen(0)
-        listen_thread = Thread(target=self._listen)
-        listen_thread.start()
-
-        sleep(0.1)  # Momentary pause while the listening socket becomes ready
-
-        self.foreign = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.foreign.connect(('localhost', self.listener.getsockname()[1]))
-        listen_thread.join()
-
-    def _listen(self):
-        """
-        In a seperate thread, await a connection
-        """
-        self.local, address = self.listener.accept()
-
-    def tearDown(self):
-        """
-        Cleanup after each test.
-        """
-        self.foreign.shutdown(socket.SHUT_RD)
-        self.foreign.close()
-        self.listener.shutdown(socket.SHUT_RD)
-        self.listener.close()
-        self.local.shutdown(socket.SHUT_RD)
-        self.local.close()
-
-    def test_receive(self):
-        """
-        Receive basic data.
-        """
-        test_str = "Testing String 123. Testing String ABC."
-        wrapper = SocketWrapper(self.local, None, None, timeout=3)
-        data_len = struct.pack(">L", len(test_str))
-        package = data_len + test_str
-        self.foreign.sendall(package)
-        self.assertEqual(wrapper._sock_receive(), test_str)
-
-        # Test big data with 79872 bytes transfered
-        big_data = test_str * 2048
-        data_len = struct.pack(">L", len(big_data))
-        package = data_len + big_data
-        self.foreign.sendall(package)
-        self.assertEqual(wrapper._sock_receive(), big_data)
-
-    def test_send(self):
-        """
-        Send basic data
-        """
-        test_str = "Testing String 123. Testing String ABC."
-        wrapper = SocketWrapper(self.local, None, None, timeout=3)
-        wrapper._sock_send(test_str)
-        fetched = self.foreign.recv(1024)
-        length = struct.unpack(">L", fetched[:4])[0]
-        self.assertEqual(length, len(fetched[4:]))
-
-    def test_send_receive(self):
-        """
-        Test two sockets sending and receiving
-        """
-        w_local = SocketWrapper(self.local, None, None, timeout=5)
-        w_foreign = SocketWrapper(self.foreign, None, None, timeout=5)
-
-        test_str = "Testing String 123. Testing String ABC."
-        w_foreign._sock_send(test_str)
-        w_local._sock_send(test_str)
-        self.assertEqual(w_foreign._sock_receive(), test_str)
-        self.assertEqual(w_local._sock_receive(), test_str)
+        self.handle = ConnectionHandler()
+        self.handle.conn = MockSock()
+        local_keys = RSA.generate(1024)
+        self.handle.local_keys = CipherWrap(local_keys)
+        pubkey = self.handle.local_keys.export()
+        self.handle.foreign_key = CipherWrap(pubkey)
+        self.handle.local_finger = Finger('192.168.0.1', 2345, pubkey)
+        # with open("./testdata_fingerspace.pickle") as handle:
+        #     fingers = pickle.load(handle)
+        # foreign_finger = fingers[0]
+        # self.handle.foreign_finger = Finger(*foreign_finger)
 
     def test_pack_unpack_procedure(self):
         """
-        Tests the :method:`fetch` and :method:`send` methods of
+        Tests the :func:`fetch` and :method:`send` methods of
         :class:`SocketWrapper`.
         """
-        from Crypto.PublicKey import RSA
-
-        local_keys = RSA.generate(1024)
-        local_pubkey = local_keys.publickey()
-
-        w_local = SocketWrapper(self.local, None, local_keys, timeout=5)
-        w_foreign = SocketWrapper(self.foreign, None, None, timeout=5)
-        w_foreign.foreign_key = local_pubkey
-
         test_params = {'testcase': 'this dict'}
-        w_foreign.send(Protocol.Ping, test_params)
-        message_type, params = w_local.fetch()
+        self.handle.send(Protocol.Ping, test_params)
+        message_type, params = self.handle.receive()
         self.assertEqual(message_type, Protocol.Ping)
         self.assertDictEqual(params, test_params)
 
@@ -171,27 +116,23 @@ class WrapperInvalidTests(unittest.TestCase):
         """
         Ensure that sending invalid data causes an error.
         """
-        wrap = SocketWrapper(socket.socket(), None, None)
-        self.assertRaises(ProtocolError, wrap.send, *("Send", {}))
-        self.assertRaises(ProtocolError, wrap.send, *(Protocol.Message,
-                                                      "Hello error!"))
+        handle = ConnectionHandler()
+        self.assertRaises(ProtocolError, handle.send, *("Send", {}))
+        self.assertRaises(ProtocolError, handle.send, *(Protocol.Message,
+                                                        "Hello error!"))
 
     def test_receive_invalid_data(self):
         """
         Ensure that receiving invalid data causes an error.
         """
-        from Crypto.PublicKey import RSA
-
-        def sub_func1():
-            return "subbers"
-
-        def sub_func2():
-            return None
+        handle = ConnectionHandler()
+        handle.conn = MockSock()
 
         local_keys = RSA.generate(1024)
-        wrap = SocketWrapper(socket.socket(), None, local_keys)
-        wrap._sock_receive = sub_func1
-        self.assertRaises(ProtocolError, wrap.fetch)
+        handle.local_keys = CipherWrap(local_keys)
 
-        wrap._sock_receive = sub_func2
-        self.assertRaises(ProtocolError, wrap.fetch)
+        handle.conn.send("subbers")
+        self.assertRaises(ProtocolError, handle.receive)
+
+        handle.conn.send('')
+        self.assertRaises(ProtocolError, handle.receive)
