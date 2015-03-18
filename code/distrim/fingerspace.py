@@ -19,7 +19,6 @@
 """
 
 import random
-import socket
 
 from hashlib import md5
 from threading import Semaphore
@@ -27,8 +26,7 @@ from Crypto.PublicKey import RSA
 
 from .assets.errors import (HashMissmatchError, FingerSpaceError,
                             FingerError)
-from .utils.utilities import CipherWrap
-from .utils.config import CFG_TIMEOUT
+from .utils.utilities import SocketWrapper, CipherWrap
 
 
 class Finger(object):
@@ -93,10 +91,7 @@ class Finger(object):
         """
         Get a socket object connected to this node.
         """
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        sock.settimeout(CFG_TIMEOUT)
-        sock.connect(self.address)
-        return sock
+        return SocketWrapper(remote_address=self.address)
 
     def get_cipher(self):
         """
