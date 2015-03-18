@@ -109,7 +109,7 @@ class SocketWrapper(object):
         except socket.error as exc:
             raise SockWrapError("Error closing socket: %s" % exc.message)
 
-    def recieve(self, read_length=1024):
+    def receive(self, read_length=1024):
         """
         Receive data from a foreign node via its socket.
 

@@ -81,14 +81,14 @@ class SocketWrapperListenTest(unittest.TestCase):
         data_len = struct.pack(">L", len(test_str))
         package = data_len + test_str
         self.foreign.sendall(package)
-        self.assertEqual(wrapper.recieve(), test_str)
+        self.assertEqual(wrapper.receive(), test_str)
 
         # Test big data with 79872 bytes transfered
         big_data = test_str * 2048
         data_len = struct.pack(">L", len(big_data))
         package = data_len + big_data
         self.foreign.sendall(package)
-        self.assertEqual(wrapper.recieve(), big_data)
+        self.assertEqual(wrapper.receive(), big_data)
 
     def test_send(self):
         """
@@ -111,8 +111,8 @@ class SocketWrapperListenTest(unittest.TestCase):
         test_str = "Testing String 123. Testing String ABC."
         w_foreign.send(test_str)
         w_local.send(test_str)
-        self.assertEqual(w_foreign.recieve(), test_str)
-        self.assertEqual(w_local.recieve(), test_str)
+        self.assertEqual(w_foreign.receive(), test_str)
+        self.assertEqual(w_local.receive(), test_str)
 
 
 class SocketWrapperConnTest(unittest.TestCase):
@@ -157,8 +157,8 @@ class SocketWrapperConnTest(unittest.TestCase):
         test_str = "Testing String 123. Testing String ABC."
         wrap.send(test_str)
         wrap2.send(test_str)
-        self.assertEqual(wrap.recieve(), test_str)
-        self.assertEqual(wrap2.recieve(), test_str)
+        self.assertEqual(wrap.receive(), test_str)
+        self.assertEqual(wrap2.receive(), test_str)
 
         wrap.close()
         wrap2.close()
@@ -191,7 +191,7 @@ class SocketWrapperConnTest(unittest.TestCase):
         self.listen_thread.join()
         self.listener.close()
         with self.assertRaises(SockWrapError) as exc:
-            wrap.recieve()
+            wrap.receive()
         self.assertEqual(exc.exception.message,
                          "Error attempting to receive data.")
 
@@ -215,7 +215,7 @@ class SocketWrapperNoSockTest(unittest.TestCase):
                          "Can't use socket, it's not connected.")
 
         with self.assertRaises(SockWrapError) as exc:
-            wrap.recieve()
+            wrap.receive()
         self.assertEqual(exc.exception.message,
                          "Can't use socket, it's not connected.")
 
