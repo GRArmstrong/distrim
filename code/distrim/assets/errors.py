@@ -58,3 +58,8 @@ class FingerError(Exception):
 
 class CipherError(Exception):
     """Raised by improper use of the CipherWrap class."""
+
+
+class SockWrapError(Exception):
+    """Raised by improper use of the SocketWrapper class or to wrap the rather
+    ghastly `socket.error` exception."""

@@ -23,13 +23,201 @@
 
 import unittest
 
+import socket
+import struct
+from time import sleep
+from threading import Thread
 from argparse import ArgumentTypeError
 from Crypto.PublicKey import RSA
 
-from ...assets.errors import InvalidIPAddressError, CipherError
+from ...assets.errors import InvalidIPAddressError, CipherError, SockWrapError
 
-from ..utilities import (CipherWrap, parse_ip, split_address, generate_padding,
-                         split_chunks, format_elapsed)
+from ..utilities import (SocketWrapper, CipherWrap, parse_ip, split_address,
+                         generate_padding, split_chunks, format_elapsed)
+
+
+class SocketWrapperListenTest(unittest.TestCase):
+    """Tests the :class:`SocketWrapper` class with a listener that creates
+    a local socket."""
+    def setUp(self):
+        """
+        Setup to execute before each test.
+        """
+        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listener.bind(('localhost', 0))
+        self.listener.listen(0)
+        listen_thread = Thread(target=self._listen)
+        listen_thread.start()
+
+        sleep(0.1)  # Momentary pause while the listening socket becomes ready
+
+        self.foreign = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.foreign.connect(('localhost', self.listener.getsockname()[1]))
+        listen_thread.join()
+
+    def _listen(self):
+        """
+        In a seperate thread, await a connection
+        """
+        self.local, address = self.listener.accept()
+
+    def tearDown(self):
+        """
+        Cleanup after each test.
+        """
+        self.foreign.shutdown(socket.SHUT_RDWR)
+        self.foreign.close()
+        self.listener.shutdown(socket.SHUT_RDWR)
+        self.listener.close()
+        self.local.shutdown(socket.SHUT_RDWR)
+        self.local.close()
+
+    def test_receive(self):
+        """
+        Receive basic data.
+        """
+        test_str = "Testing String 123. Testing String ABC."
+        wrapper = SocketWrapper(sock=self.local, timeout=3)
+        data_len = struct.pack(">L", len(test_str))
+        package = data_len + test_str
+        self.foreign.sendall(package)
+        self.assertEqual(wrapper.recieve(), test_str)
+
+        # Test big data with 79872 bytes transfered
+        big_data = test_str * 2048
+        data_len = struct.pack(">L", len(big_data))
+        package = data_len + big_data
+        self.foreign.sendall(package)
+        self.assertEqual(wrapper.recieve(), big_data)
+
+    def test_send(self):
+        """
+        Send basic data
+        """
+        test_str = "Testing String 123. Testing String ABC."
+        wrapper = SocketWrapper(sock=self.local, timeout=3)
+        wrapper.send(test_str)
+        fetched = self.foreign.recv(1024)
+        length = struct.unpack(">L", fetched[:4])[0]
+        self.assertEqual(length, len(fetched[4:]))
+
+    def test_send_receive(self):
+        """
+        Test two sockets sending and receiving
+        """
+        w_local = SocketWrapper(sock=self.local, timeout=3)
+        w_foreign = SocketWrapper(sock=self.foreign, timeout=3)
+
+        test_str = "Testing String 123. Testing String ABC."
+        w_foreign.send(test_str)
+        w_local.send(test_str)
+        self.assertEqual(w_foreign.recieve(), test_str)
+        self.assertEqual(w_local.recieve(), test_str)
+
+
+class SocketWrapperConnTest(unittest.TestCase):
+    """Tests the :class:`SocketWrapper` class with a listener only."""
+    def setUp(self):
+        """
+        Setup to execute before each test.
+        """
+        self.listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.listener.bind(('localhost', 0))
+        self.listener.listen(0)
+        self.addr = self.listener.getsockname()
+        self.listen_thread = Thread(target=self._listen)
+        self.listen_thread.start()
+
+    def _listen(self):
+        """
+        In a seperate thread, await a connection
+        """
+        self.sock, address = self.listener.accept()
+
+    def tearDown(self):
+        """
+        Cleanup after each test.
+        """
+        try:
+            self.listener.shutdown(socket.SHUT_RDWR)
+            self.listener.close()
+        except socket.error:
+            pass
+
+    def test_init_none(self):
+        """Init with nothing."""
+        wrap = SocketWrapper()
+        self.assertFalse(wrap.is_connected())
+        wrap.connect(self.addr)
+        self.listen_thread.join()
+        self.assertTrue(wrap.is_connected())
+        wrap2 = SocketWrapper(self.sock)
+        self.assertTrue(wrap2.is_connected())
+
+        test_str = "Testing String 123. Testing String ABC."
+        wrap.send(test_str)
+        wrap2.send(test_str)
+        self.assertEqual(wrap.recieve(), test_str)
+        self.assertEqual(wrap2.recieve(), test_str)
+
+        wrap.close()
+        wrap2.close()
+        self.assertFalse(wrap.is_connected())
+        self.assertFalse(wrap2.is_connected())
+
+    def test_init_sock(self):
+        """init with a socket"""
+        wrap = SocketWrapper(socket.socket(socket.AF_INET, socket.SOCK_STREAM))
+        self.assertFalse(wrap.is_connected())
+        wrap.connect(self.addr)
+        self.listen_thread.join()
+        self.assertTrue(wrap.is_connected())
+        wrap.close()
+
+    def test_init_addr(self):
+        """init with an address"""
+        wrap = SocketWrapper(remote_address=self.addr)
+        self.assertFalse(wrap.is_connected())
+        wrap.connect()
+        wrap.connect()  # Attempting to connect while connected is harmless
+        self.listen_thread.join()
+        self.assertTrue(wrap.is_connected())
+        wrap.close()
+
+    def test_close_error(self):
+        """test errors when closing"""
+        wrap = SocketWrapper(timeout=1)
+        wrap.connect(self.addr)
+        self.listen_thread.join()
+        self.listener.close()
+        with self.assertRaises(SockWrapError) as exc:
+            wrap.recieve()
+        self.assertEqual(exc.exception.message,
+                         "Error attempting to receive data.")
+
+
+class SocketWrapperNoSockTest(unittest.TestCase):
+    """Tests the :class:`SocketWrapper` class without external sockets."""
+    def test_no_remote_addr(self):
+        """Test no remote address"""
+        wrap = SocketWrapper()
+        with self.assertRaises(SockWrapError) as exc:
+            wrap.connect()
+        self.assertEqual(exc.exception.message,
+                         "Connect to what? No remote address.")
+
+    def test_not_connected(self):
+        """Test no remote address"""
+        wrap = SocketWrapper()
+        with self.assertRaises(SockWrapError) as exc:
+            wrap.send("Message")
+        self.assertEqual(exc.exception.message,
+                         "Can't use socket, it's not connected.")
+
+        with self.assertRaises(SockWrapError) as exc:
+            wrap.recieve()
+        self.assertEqual(exc.exception.message,
+                         "Can't use socket, it's not connected.")
 
 
 class TestCipherWrap(unittest.TestCase):

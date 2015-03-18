@@ -18,6 +18,8 @@
     Miscelaneous Utility functions.
 """
 
+import socket
+import struct
 
 from os import urandom
 from random import randint
@@ -26,9 +28,119 @@ from argparse import ArgumentTypeError
 from Crypto.PublicKey import RSA
 from netifaces import gateways, ifaddresses, AF_INET
 
-from .config import CFG_SALT_LEN_MIN, CFG_SALT_LEN_MAX
+from .config import (CFG_SALT_LEN_MIN, CFG_SALT_LEN_MAX, CFG_TIMEOUT,
+                     CFG_STRUCT_FMT)
 from ..assets.errors import (InvalidIPAddressError, NetInterfaceError,
-                             CipherError)
+                             CipherError, SockWrapError)
+
+
+class SocketWrapper(object):
+    """
+    Socket interface for communication with foreign nodes.
+
+    This class wraps around a :class:`socket.socket` object. It provides the
+    ability to send and receive packed data, packing it with the length to
+    ensure all data is received.
+
+    If the socket is not connected, use the :func:`connect` method to establish
+    the connection.
+    """
+    def __init__(self, sock=None, remote_address=None, timeout=CFG_TIMEOUT):
+        """
+        Create the wrapper for the sockets.
+
+        Note: You can pass in a socket or an address, if you pass in a
+        connected socket, the remote address will be ignored.
+
+        :param sock: the `socket` object. If None, a socket is created using
+            the default values.
+        :param remote_address: IP and Port of the remote host.
+        :param timeout: the timeout value of the socket, how long it will pend
+            waiting for a remote response.
+        """
+        if not sock:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock = sock
+        self.remote_address = remote_address
+        self.sock.settimeout(timeout)
+
+    def _test_connection(self):
+        """Test if connected, raise exception if not."""
+        if not self.is_connected():
+            raise SockWrapError("Can't use socket, it's not connected.")
+
+    def is_connected(self):
+        """
+        Determines if the socket is connected or not.
+        :return: True if it is, False if it isn't.
+        """
+        try:
+            self.sock.getpeername()
+            return True
+        except socket.error:
+            return False
+
+    def connect(self, remote_address=None):
+        """
+        Connect the socket to the remote address.
+
+        :param remote_address: IP and Port of the remote host.
+        """
+        if self.is_connected():
+            return
+
+        try:
+            if remote_address:
+                self.sock.connect(remote_address)
+            elif self.remote_address:
+                self.sock.connect(self.remote_address)
+            else:
+                raise SockWrapError("Connect to what? No remote address.")
+        except (socket.error, socket.timeout):
+            raise SockWrapError("Failure to connect.")
+
+    def close(self):
+        """
+        Close connection with the foreign node.
+        """
+        try:
+            self.sock.shutdown(socket.SHUT_RDWR)
+            self.sock.close()
+        except socket.error as exc:
+            raise SockWrapError("Error closing socket: %s" % exc.message)
+
+    def recieve(self, read_length=1024):
+        """
+        Receive data from a foreign node via its socket.
+
+        :param read_length: How many bytes to read at a time.
+        """
+        self._test_connection()
+        received_data = ''
+        try:
+            length = struct.unpack(CFG_STRUCT_FMT, self.sock.recv(4))[0]
+            while length > len(received_data):
+                stream_out = self.sock.recv(read_length)
+                received_data += stream_out
+        except (socket.error, socket.timeout):
+            raise SockWrapError("Error attempting to receive data.")
+        return received_data
+
+    def send(self, data):
+        """
+        Send data to the foreign node via its socket.
+
+        :param data: The data packet to send.
+        """
+        self._test_connection()
+        length = struct.pack(CFG_STRUCT_FMT, len(data))
+        package = length + data
+        sent_len = 0
+        try:
+            while sent_len < len(package):
+                sent_len += self.sock.send(package)
+        except (socket.error, socket.timeout):
+            raise SockWrapError("Error attempting to data data.")
 
 
 class CipherWrap(object):
