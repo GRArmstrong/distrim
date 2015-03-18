@@ -20,11 +20,11 @@
 
 
 class InvalidIPAddressError(ValueError):
-    pass
+    """Raised if a given IP address is not valid"""
 
 
 class NetInterfaceError(Exception):
-    pass
+    """Raised if failure getting local IP address."""
 
 
 class HashMissmatchError(Exception):
@@ -41,7 +41,7 @@ class HashMissmatchError(Exception):
 
 
 class FingerSpaceError(ValueError):
-    pass
+    """Raised if an error occurs in the FingerSpace"""
 
 
 class ProtocolError(Exception):
