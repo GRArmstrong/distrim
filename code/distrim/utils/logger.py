@@ -60,7 +60,7 @@ def create_logger(name, log_ip='', log_port=1999, show_debug=True, ident=''):
 
     :return: An instance of ``logging.Logger``.
     """
-    new_logger = logging.Logger(name)
+    new_logger = logging.getLogger(name)
 
     level = logging.DEBUG if show_debug else logging.INFO
     new_logger.setLevel(level)
