@@ -29,17 +29,18 @@ class CustomUDPHandler(DatagramHandler):
     An extension of DatagramHandler that allows extra information to be passed
     onto the listening server.
     """
-
-    def __init__(self, host, port, record_additions={}):
+    def __init__(self, host, port, record_additions=None):
         super(CustomUDPHandler, self).__init__(host, port)
         self.record_additions = record_additions
 
     def handle(self, record):
-        for key, value in self.record_additions.iteritems():
-            if key in record.__dict__:
-                raise AttributeError(
-                    "Attempt to overwrite attribute %s in record." % (key,))
-            record.__setattr__(key, value)
+        if self.record_additions:
+            for key, value in self.record_additions.iteritems():
+                if key in record.__dict__:
+                    raise AttributeError(
+                        "Attempt to overwrite attribute '%s' in record."
+                        % (key,))
+                record.__setattr__(key, value)
         super(CustomUDPHandler, self).handle(record)
 
 
@@ -63,14 +64,14 @@ def create_logger(name, log_ip='', log_port=1999, show_debug=True, ident=''):
 
     level = logging.DEBUG if show_debug else logging.INFO
     new_logger.setLevel(level)
-    
+
     fmt_str = "[%(asctime)s] [%(levelname)s] <%(threadName)s>: %(message)s"
     formatter = logging.Formatter(fmt=fmt_str, datefmt="%I:%M:%S")
 
     stream = logging.StreamHandler()
     stream.setLevel(level)
     stream.setFormatter(formatter)
-    
+
     new_logger.addHandler(stream)
 
     if log_ip:
