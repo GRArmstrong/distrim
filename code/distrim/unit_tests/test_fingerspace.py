@@ -110,6 +110,12 @@ JJrG7JW3onqtfHFi4wIDAQAB
         self.assertTrue(
             exc.exception.message.startswith("public_key is not valid:"))
 
+        private_key = RSA.generate(1024).exportKey(format='DER')
+        with self.assertRaises(FingerError) as exc:
+            finger_type_test('192.168.5.35', 6050, private_key)
+        self.assertTrue(exc.exception.message ==
+                        "!!!This is a private key, not public!!!")
+
     def test_hex_to_int(self):
         """Tests the h2i function"""
         self.assertEquals(h2i('2a'), 42)
@@ -188,7 +194,7 @@ class FingerSocketTest(unittest.TestCase):
         """
         In a seperate thread, await a connection
         """
-        self.local, address = self.listener.accept()
+        self.local, self.address = self.listener.accept()
 
     def tearDown(self):
         """
@@ -318,3 +324,32 @@ class FingerSpaceTests(unittest.TestCase):
 
         path = fsi.get_random_fingers(5000)
         self.assertEqual(len(path), len(self.test_node_list))
+
+    def test_import_and_export(self):
+        """Tests importing and exporting values."""
+        fs1 = FingerSpace(self.mock_log, self.local_finger)
+        for values in self.test_node_list:
+            fs1.put(*values)
+
+        expected = [Finger(*node).all for node in self.test_node_list]
+        gotten = fs1.export_nodes()
+        expected.sort()
+        gotten.sort()
+        self.assertListEqual(gotten, expected)
+        fs2 = FingerSpace(self.mock_log, self.local_finger)
+        fs2.import_nodes(expected)
+        self.assertDictEqual(fs1._keyspace, fs2._keyspace)
+        self.assertFalse(self.mock_log.warning.called)
+
+    def test_get_all(self):
+        """Test the magic __iter__ function"""
+        fsi = FingerSpace(self.mock_log, self.local_finger)
+        for addr, port, ident in self.test_node_list:
+            fsi.put(addr, port, ident)
+
+        fingers = fsi.get_all()
+        expected = [Finger(*pars) for pars in self.test_node_list]
+
+        fingers.sort()
+        expected.sort()
+        self.assertListEqual(fingers, expected)

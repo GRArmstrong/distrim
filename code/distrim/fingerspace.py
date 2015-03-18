@@ -82,6 +82,13 @@ class Finger(object):
             return True
         return False
 
+    def __repr__(self):
+        """
+        Representation of this object by text.
+        """
+        return "<Fingerspace.Finger %s @ %s:%d>" % (self.ident, self.addr,
+                                                    self.port)
+
     def get_socket(self):
         """
         Get a socket object connected to this node.
@@ -126,6 +133,45 @@ class FingerSpace(object):
         """FingerSpace length, the number of keys stored"""
         with self.access:
             return len(self._keyspace)
+
+    def import_nodes(self, nodes_list):
+        """
+        Import a list of nodes.
+
+        Receives a list of tuples, typically from a foreign node exporting
+        their list, and adds those nodes to the FingerSpace.
+
+        Data is expected to be (ip address, port, public key[, ident])
+        The ident is optional.
+
+        :param nodes: List of nodes.
+        """
+        for values in nodes_list:
+            try:
+                self.put(*values)  # Star-input allows us to use 3 or 4 args
+            except FingerError as exc:
+                self.log.error("Error importing finger: %s", exc.message)
+
+    def export_nodes(self):
+        """
+        Export a list of all nodes.
+
+        Exports a list of all nodes in tuple format for serialising and sending
+        to foreign nodes.
+
+        Data is exported as (ip address, port, public key, ident)
+
+        :return: A list of tuples with the data from the 'all' attribute.
+        """
+        with self.access:
+            return [finger.all for finger in self._keyspace.itervalues()]
+
+    def get_all(self):
+        """
+        Gets a list of all fingers.
+        """
+        with self.access:
+            return self._keyspace.values()
 
     def get(self, ident):
         """
@@ -261,7 +307,9 @@ def finger_type_test(ip_address, listening_port, public_key):
         raise FingerError("public_key must be in binary format")
 
     try:
-        RSA.importKey(public_key)
+        key = RSA.importKey(public_key)
+        if key.has_private():
+            raise FingerError("!!!This is a private key, not public!!!")
     except (ValueError, IndexError) as exc:
         raise FingerError("public_key is not valid:\n%s" % exc.message)
 
