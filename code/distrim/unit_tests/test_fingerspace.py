@@ -28,6 +28,7 @@ from threading import Thread
 from mock import Mock
 from Crypto.PublicKey import RSA
 
+from ..utils.utilities import SocketWrapper
 from ..fingerspace import (FingerSpace, Finger, generate_hash,
                            finger_type_test, h2i)
 from ..assets.errors import FingerSpaceError, FingerError, HashMissmatchError
@@ -194,7 +195,8 @@ class FingerSocketTest(unittest.TestCase):
         """
         In a seperate thread, await a connection
         """
-        self.local, self.address = self.listener.accept()
+        local, address = self.listener.accept()
+        self.local = SocketWrapper(local)
 
     def tearDown(self):
         """
@@ -202,7 +204,6 @@ class FingerSocketTest(unittest.TestCase):
         """
         self.listener.shutdown(socket.SHUT_RDWR)
         self.listener.close()
-        self.local.shutdown(socket.SHUT_RDWR)
         self.local.close()
 
     def test_get_socket(self):
@@ -210,11 +211,11 @@ class FingerSocketTest(unittest.TestCase):
         Receive basic data.
         """
         sock = self.finger.get_socket()
+        sock.connect()
         self.listen_thread.join()
         data = '12345678'
-        sock.sendall(data)
-        self.assertEqual(self.local.recv(8), data)
-        sock.shutdown(socket.SHUT_RDWR)
+        sock.send(data)
+        self.assertEqual(self.local.receive(8), data)
         sock.close()
 
 
@@ -224,7 +225,7 @@ class FingerSpaceTests(unittest.TestCase):
         """Load in test data"""
         import cPickle as pickle
         test_data_path = (__file__.rpartition('/')[0]
-                          + '/testdata_fingerspace.pickle')
+                          + '/_testdata_fingerspace.pickle')
         with open(test_data_path) as hand:
             nodes = pickle.load(hand)
         self.local_finger = Finger(*nodes[0])
@@ -313,12 +314,14 @@ class FingerSpaceTests(unittest.TestCase):
         for addr, port, key in self.test_node_list:
             fsi.put(addr, port, key)
 
+        all_fingers = [x[1] for x in fsi._keyspace.items()]
+
         lengths = [1, 2, 5, 10, 14]
         for length in lengths:
             path = fsi.get_random_fingers(length)
             self.assertEqual(len(path), length)
             for finger in path:
-                self.assertIn(finger, fsi._keyspace.items())
+                self.assertIn(finger, all_fingers)
 
         self.assertRaises(ValueError, fsi.get_random_fingers, 0)
 
@@ -342,7 +345,7 @@ class FingerSpaceTests(unittest.TestCase):
         self.assertFalse(self.mock_log.warning.called)
 
     def test_get_all(self):
-        """Test the magic __iter__ function"""
+        """Test the get_all function"""
         fsi = FingerSpace(self.mock_log, self.local_finger)
         for addr, port, ident in self.test_node_list:
             fsi.put(addr, port, ident)
@@ -352,4 +355,5 @@ class FingerSpaceTests(unittest.TestCase):
 
         fingers.sort()
         expected.sort()
-        self.assertListEqual(fingers, expected)
+        for idx in xrange(len(expected)):
+            self.assertEqual(fingers[idx].all, expected[idx].all)

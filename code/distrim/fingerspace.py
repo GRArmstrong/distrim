@@ -245,7 +245,7 @@ class FingerSpace(object):
         with self.access:
             for _ in xrange(number):
                 key = random.choice(idents)
-                route.append((key, self._keyspace[key]))
+                route.append(self._keyspace[key])
                 idents.remove(key)
         return route
 
