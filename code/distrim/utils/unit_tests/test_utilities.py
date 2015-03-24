@@ -323,17 +323,6 @@ class TestCipherWrap(unittest.TestCase):
                          "Can't decrypt, no private key!")
 
 
-class TestParseIP(unittest.TestCase):
-    """Tests the Parse IP function"""
-    def test_valid_ip(self):
-        """Expect success"""
-        self.assertEqual(((192, 168, 3, 4), 81), parse_ip("192.168.3.4:81"))
-
-    def test_invalid_ip(self):
-        """Expect failure"""
-        self.assertRaises(InvalidIPAddressError, parse_ip, "192.999.0.1:82")
-
-
 class TestAddressSplit(unittest.TestCase):
     """Tests the address split function"""
     def test_valid(self):
