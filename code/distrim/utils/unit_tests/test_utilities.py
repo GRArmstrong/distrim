@@ -280,6 +280,16 @@ class TestCipherWrap(unittest.TestCase):
         crypted = public.encrypt(test_data)
         self.assertEqual(private.decrypt(crypted), test_data)
 
+    def test_encrypt_decrypt_big(self):
+        """Test the encryption and decryption methods"""
+        keys = RSA.generate(1024)  # _RSAobj Instance
+        private = CipherWrap(keys)
+        public = CipherWrap(private.export())
+
+        test_data = "Data leng 32 repeated 2048 times" * 2048  # 65536 bytes
+        crypted = public.encrypt(test_data)
+        self.assertEqual(private.decrypt(crypted), test_data)
+
     def test_invalid_init(self):
         """Test exceptions when creating an instance"""
         with self.assertRaises(CipherError) as exc:
@@ -365,13 +375,30 @@ class TestPadding(unittest.TestCase):
 class TestSplitChunks(unittest.TestCase):
     """Tests the split chunks function"""
     def test_split(self):
-        """Expect success"""
+        """Test the values in each part of the split list"""
         test = "This string will be split."
         expected = ["This ", "strin", "g wil", "l be ", "split", "."]
         results = []
         for result in split_chunks(test, 5):
             results.append(result)
         self.assertListEqual(results, expected)
+
+    def test_lengths(self):
+        """Ensure the lengths are what we expect."""
+        test_list = range(1048641)  # 1024*1024 + 65
+        chunks = split_chunks(test_list, 1024)
+        self.assertEqual(1025, len(list(chunks)))
+        for idx, chunk_gen in enumerate(chunks):
+            chunk = list(chunk_gen)
+            start = idx * 1024
+            if idx == 1024:
+                end = 1048640
+                self.assertEqual(1024, len(65))
+            else:
+                end = start + 1023
+                self.assertEqual(1024, len(chunk))
+            self.assertEqual(start, chunk[0])
+            self.assertEqual(end, chunk[-1])
 
 
 class TestTimeDeltaFormat(unittest.TestCase):

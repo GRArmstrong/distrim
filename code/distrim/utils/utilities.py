@@ -29,7 +29,7 @@ from Crypto.PublicKey import RSA
 from netifaces import gateways, ifaddresses, AF_INET
 
 from .config import (CFG_SALT_LEN_MIN, CFG_SALT_LEN_MAX, CFG_TIMEOUT,
-                     CFG_STRUCT_FMT)
+                     CFG_STRUCT_FMT, CFG_CRYPT_CHUNK_SIZE)
 from ..assets.errors import (InvalidIPAddressError, NetInterfaceError,
                              CipherError, SockWrapError)
 
@@ -192,7 +192,7 @@ class CipherWrap(object):
         else:
             raise ValueError("Value for param 'key_type' must be in [0, 1, 2]")
 
-    def encrypt(self, data):
+    def encrypt(self, data, split_size=CFG_CRYPT_CHUNK_SIZE):
         """
         Encrypt a packet of data.
 
@@ -202,21 +202,26 @@ class CipherWrap(object):
         :return: The encrypted data.
         """
         if not isinstance(data, basestring):
-            raise CipherError("Can only encrypt ")
-        if len(data) > 128:
-            raise CipherError("RSA Can't encrypt longer than 128 bytes")
-        return self.rsa_instance.encrypt(data, None)[0]
+            raise CipherError("Can only encrypt string data")
 
-    def decrypt(self, data):
+        cryptic = ''
+        for chunk in split_chunks(data, part_size=split_size):
+            cryptic += self.rsa_instance.encrypt(chunk, None)[0]
+        return cryptic
+
+    def decrypt(self, cryptic_data, split_size=CFG_CRYPT_CHUNK_SIZE):
         """
         Decrypt a packet of data.
 
-        :param data: The data to decrypt.
+        :param cryptic_data: The encrypted data to decrypt.
         :return: The decrypted data.
         """
         if not self._has_private:
             raise CipherError("Can't decrypt, no private key!")
-        return self.rsa_instance.decrypt(data)
+        data = ''
+        for chunk in split_chunks(cryptic_data, part_size=split_size):
+            data += self.rsa_instance.decrypt(chunk)
+        return data
 
 
 def parse_ip(str_ip):
