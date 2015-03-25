@@ -70,7 +70,8 @@ class Node(object):
         :param remote_ip: IP address of a remote note to bootstrap against.
         :param remote_port: Listening port of the remote node.
         """
-        self.log.info("Node starting at %s:%d", self.local_ip, self.local_port)
+        self.log.info("Node started %s @ %s:%d", self.finger.ident,
+                      self.local_ip, self.local_port)
         self.start_time = dto.now()
         self.conn_manager.start()
         if remote_ip:

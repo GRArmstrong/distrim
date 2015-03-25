@@ -157,7 +157,6 @@ class CommandLineInterface(object):
     def cmd_quit(self, params):
         """Input Command: Terminate the node and exit."""
         print "Shutting down..."
-        self.node.stop()
         self.running = False
 
 
