@@ -30,9 +30,9 @@ from threading import Thread
 from argparse import ArgumentTypeError
 from Crypto.PublicKey import RSA
 
-from ...assets.errors import InvalidIPAddressError, CipherError, SockWrapError
+from ...assets.errors import CipherError, SockWrapError
 
-from ..utilities import (SocketWrapper, CipherWrap, parse_ip, split_address,
+from ..utilities import (SocketWrapper, CipherWrap, split_address,
                          generate_padding, split_chunks, format_elapsed)
 
 

@@ -19,10 +19,6 @@
 """
 
 
-class InvalidIPAddressError(ValueError):
-    """Raised if a given IP address is not valid"""
-
-
 class NetInterfaceError(Exception):
     """Raised if failure getting local IP address."""
 
@@ -50,6 +46,10 @@ class ProtocolError(Exception):
 
 class ProcedureError(ProtocolError):
     """Raised during communications if data sent at incorrect time."""
+
+
+class AuthError(ProtocolError):
+    """Raised if authentication with a foreign node fails."""
 
 
 class FingerError(Exception):

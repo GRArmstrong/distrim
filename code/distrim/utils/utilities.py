@@ -30,8 +30,7 @@ from netifaces import gateways, ifaddresses, AF_INET
 
 from .config import (CFG_SALT_LEN_MIN, CFG_SALT_LEN_MAX, CFG_TIMEOUT,
                      CFG_STRUCT_FMT, CFG_CRYPT_CHUNK_SIZE)
-from ..assets.errors import (InvalidIPAddressError, NetInterfaceError,
-                             CipherError, SockWrapError)
+from ..assets.errors import NetInterfaceError, CipherError, SockWrapError
 
 
 class SocketWrapper(object):
