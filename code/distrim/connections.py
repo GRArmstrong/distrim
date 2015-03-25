@@ -26,7 +26,7 @@ from time import sleep
 from threading import Thread
 from thread_pool import ThreadPool
 
-from .protocol import IncomingConnection, Boostrapper
+from .protocol import IncomingConnection, OutgoingConnection, Boostrapper
 from .utils.config import CFG_THREAD_POOL_LENGTH, CFG_LISTENING_QUEUE
 
 
@@ -88,6 +88,17 @@ class ConnectionsManager(object):
                                  self.local_keys)
         connection.bootstrap((remote_ip, remote_port))
 
+    def send_message(self, recipient, message):
+        """
+        Send a message via relays.
+
+        :param recipient: Finger of the node to send the message to.
+        :param message: Plaintext message to send.
+        """
+        postman = OutgoingConnection(
+            self.log, self.fingerspace, self.local_finger, self.local_keys)
+        postman.send_message(recipient, message)
+
     def pool_new_connection(self, sock, address):
         """
         Handle incoming connection, puts socket into seperate thread.
@@ -102,6 +113,7 @@ class ConnectionsManager(object):
         :param address: Address of the connecting node.
         """
         try:
+            print 'New Connection from:', address
             connection = IncomingConnection(
                 self.log, sock, address, self.fingerspace, self.local_finger,
                 self.local_keys)

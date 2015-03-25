@@ -83,6 +83,10 @@ class Node(object):
 
     def send_message(self, recipient, message):
         """
-        Do the thing
+        Send a message.
         """
-        raise NotImplementedError
+        rec = self.fingerspace.get(recipient)
+        if not rec:
+            self.log.error("No such node: %s", recipient)
+            return
+        return self.conn_manager.send_message(rec, message)
