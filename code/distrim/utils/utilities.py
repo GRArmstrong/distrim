@@ -20,9 +20,9 @@
 
 import socket
 import struct
+import string
 
-from os import urandom
-from random import randint
+from random import randint, choice, SystemRandom
 from argparse import ArgumentTypeError
 
 from Crypto.PublicKey import RSA
@@ -271,7 +271,10 @@ def generate_padding(min_length=CFG_SALT_LEN_MIN, max_length=CFG_SALT_LEN_MAX):
     :param max_length: Maximum length of the padding.
     :return: The padding.
     """
-    return urandom(randint(min_length, max_length))
+    uld = string.ascii_letters + string.digits
+    length = randint(min_length, max_length)
+    pad_list = [SystemRandom().choice(uld) for char in xrange(length)]
+    return ''.join(pad_list)
 
 
 def split_chunks(seq, part_size=128):
