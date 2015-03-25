@@ -26,7 +26,7 @@ import cPickle as pickle
 from cPickle import UnpicklingError
 
 from .fingerspace import Finger
-from .assets.errors import ProtocolError, ProcedureError
+from .assets.errors import ProtocolError, ProcedureError, AuthError
 from .utils.config import (CFG_PICKLE_PROTOCOL, CFG_STRUCT_FMT,
                            CFG_CRYPT_CHUNK_SIZE, CFG_TIMEOUT)
 from .utils.utilities import (SocketWrapper, CipherWrap, generate_padding,
@@ -74,6 +74,17 @@ class ConnectionHandler(object):
     used for the transaction which are checked for consistency. The padding
     is used for cryptographic scrambling and is discarded.
     """
+    def __init__(self):
+        raise NotImplementedError("ConnectionHandler is abstract!")
+
+    def send(self, message_type, parameters):
+        """
+        Construct a message and send it.
+        """
+        self._verify_message(message_type, parameters)
+        cryptic_data = self.package(message_type, parameters)
+        self.conn.send(cryptic_data)
+
     def receive(self, expected=None):
         """
         Receive a message from the foreign node.
@@ -81,36 +92,18 @@ class ConnectionHandler(object):
         :return: A message type, and its parameters
         """
         cryptic_data = self.conn.receive()  # Receive foreign data
-        # self.log.debug("cryptic length receive: %d", len(cryptic_data))
-        self.log.debug("cryptic length rec: %d", len(cryptic_data))
-        self.log.debug("rec crypt: %s", md5(cryptic_data).hexdigest())
 
-        data = ''
-        # print self.local_keys.export(text=True)
-        for piece in split_chunks(cryptic_data, CFG_CRYPT_CHUNK_SIZE):
-            data += self.local_keys.decrypt(piece)  # Decrypt it
-
-        self.log.debug("data length rec: %d", len(data))
-        # with open("/tmp/rec", 'w') as handle:
-        #     handle.write(data)
-
-        self.log.debug("rec: %s", md5(data[0:600]).hexdigest())
         try:
-            msg = pickle.loads(data)  # Build object
-        except UnpicklingError as exc:
-            raise ProtocolError("Couldn't de-serialise: %s" % (exc.message,))
+            foreign, message_type, parameters = self.unpack(cryptic_data)
+        except ValueError:
+            raise ProtocolError("Error unpacking received data.")
+        self._verify_foreign(foreign)
+        self._verify_message(message_type, parameters, expected)
+        return message_type, parameters
 
-        self._verify_sender(msg[0])
-        self._verify_message(msg, expected)
-
-        if expected:
-            return msg[2]
-        else:
-            return msg[1], msg[2]
-
-    def send(self, message_type, parameters):
+    def package(self, message_type, parameters):
         """
-        Construct a message and send it to a foreign node.
+        Construct a message for sending to a foreign node.
 
         :param message_type: Type of message from the Protocol class.
         :param parameters: Parameters of the message, as a dict.
@@ -121,41 +114,59 @@ class ConnectionHandler(object):
         if type(parameters) is not dict:
             raise ProtocolError("Message parameters must be in a dictionary.")
 
-        msg = (self.local_finger.all, message_type,
-               parameters, generate_padding())
-        # TODO: Node data
+        msg = (self.local_finger.all, message_type, parameters)
+
         data = pickle.dumps(msg, protocol=CFG_PICKLE_PROTOCOL)
-        self.log.debug("data length send: %d", len(data))
-        self.log.debug("send: %s", md5(data[0:600]).hexdigest())
+        data_pack = data + generate_padding()
 
-        cryptic_data = ''
-        for piece in split_chunks(data, CFG_CRYPT_CHUNK_SIZE):
-            cryptic_data += self.foreign_key.encrypt(piece)
-        self.log.debug("cryptic length send: %d", len(cryptic_data))
-        self.log.debug("send crypt: %s", md5(cryptic_data).hexdigest())
-        self.conn.send(cryptic_data)
+        cryptic_data = self.foreign_key.encrypt(data_pack)
+        return cryptic_data
 
-    def _verify_sender(self, sender_info):
-        # TODO: Improve
-        self.foreign_finger = Finger(*sender_info)
+    def unpack(self, cryptic_data):
+        """
+        Unpack data sent to this node by a foreign node.
+        """
+        data = self.local_keys.decrypt(cryptic_data)
 
-    def _verify_message(self, msg, expected):
+        try:
+            foreign, msg_type, params = pickle.loads(data)
+        except UnpicklingError as exc:
+            self.log.error("Unpickling error, %s", exc.message)
+            self.log.error("Decrypted hash: %s", md5(data).hexdigest())
+            raise ProtocolError("Couldn't de-serialise: %s" % (exc.message,))
+        except ValueError:
+            print ' ======= VALUE ERROR =========='
+            print 'data', data
+            print ' ======= =========== =========='
+            raise
+        return foreign, msg_type, params
+
+    def _verify_foreign(self, sender_info):
+        """Verify the foreign node"""
+        sender_finger = Finger(*sender_info)
+        try:
+            if self.foreign_finger != sender_finger:
+                self.log.warning("Authentication error with %s",
+                                 self.foreign_finger.ident)
+                raise AuthError("Info of foreign not match of locally stored")
+        except AttributeError:
+            self.log.debug("Unknown connection, authenticating now...")
+            self.foreign_finger = sender_finger
+            self.foreign_key = sender_finger.get_cipher()
+            self.fingerspace.put(*sender_info)
+
+    def _verify_message(self, msg_type, parameters, expected=None):
         """Check message for consistency"""
-        # Test that the structure we receive is what we expect
-        if type(msg) is not tuple and len(msg) != 4:
-            raise ProtocolError("Received object is not a tuple as expected")
-
-        sender, message, params = msg[:3]
-
-        if msg[1] not in Protocol.ALL:
+        if msg_type not in Protocol.ALL:
             raise ProtocolError("Received message not valid protocol")
 
-        if expected and expected != msg[1]:
+        if expected and expected != msg_type:
             raise ProcedureError("Expected message type '%s' but got '%s'" %
-                                 (expected, msg[1]))
+                                 (expected, msg_type))
 
-        if type(msg[2]) is not dict:
-            raise ProtocolError("Received message params not valid dict.")
+        for key in parameters.keys():
+            if key.upper() != key:
+                raise ProtocolError("Invalid key in parameters '%s'." % (key,))
 
     def close(self):
         """
@@ -176,11 +187,41 @@ class Boostrapper(ConnectionHandler):
         :param timeout: Timeout time for socket.
         """
         self.log = log.getChild('bootstrapper')
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.conn = SocketWrapper(sock)
+        self.conn = SocketWrapper()
         self.fingerspace = fingerspace
         self.local_finger = local_finger
         self.local_keys = local_keys
+
+    def _setup(self, foreign_info):
+        """
+        Set necessary local variables after initial connection.
+
+        Since little is known about the foreign node prior to the creation of
+        this object, it's necessary to fill in information about the foreign
+        node before two-way message passing can happen.
+        """
+        self.foreign_finger = Finger(*foreign_info)
+        self.foreign_key = self.foreign_finger.get_cipher()
+        self.fingerspace.put(*self.foreign_finger.all)
+
+    def _init_connection(self, remote_address):
+        """
+        Establish connection and setup this object.
+        """
+        self.conn.connect(remote_address)
+        self.log.info("Bootstrap connection established.")
+        boot_package = pickle.dumps(self.local_finger.all,
+                                    protocol=CFG_PICKLE_PROTOCOL)
+        self.conn.send(boot_package)
+        self.log.info("Bootstrap package sent.")
+
+        # Expect back a welcome message.
+        cryptic_data = self.conn.receive()  # Receive foreign data
+        foreign, message_type, parameters = self.unpack(cryptic_data)
+        if message_type != Protocol.Welcome:
+            raise ProcedureError("Expected welcome from bootstrap node.")
+        self._setup(foreign)
+        return parameters
 
     def bootstrap(self, remote_address):
         """
@@ -192,17 +233,9 @@ class Boostrapper(ConnectionHandler):
 
         :param remote_address: IP and Port tuple of bootstrap node.
         """
-        self.conn.connect(remote_address)
-        self.log.info("Bootstrap connection established.")
-        boot_package = pickle.dumps(self.local_finger.all,
-                                    protocol=CFG_PICKLE_PROTOCOL)
-        self.conn.send(boot_package)
-        self.log.info("Bootstrap package sent.")
-        # Expect back a welcome message.
-        received = self.receive(Protocol.Welcome)
+        welcome_params = self._init_connection(remote_address)
         # We will add your technological distinctiveness to our own.
-        self.fingerspace.put(*self.foreign_finger.all)
-        nodes_list = received.get('NODES')
+        nodes_list = welcome_params.get('NODES')
         if nodes_list:
             self.fingerspace.import_nodes(nodes_list)
         self.log.info("SUCCESS! Rendezvous occured.")
@@ -227,7 +260,6 @@ class IncomingConnection(ConnectionHandler):
         :param sock: The socket object.
         """
         self.log = log.getChild("incoming@%s" % (addr[0],))
-        print 'logger name', self.log.name
         self.conn = SocketWrapper(sock)
         self.fingerspace = fingerspace
         self.local_finger = local_finger
@@ -261,10 +293,30 @@ class IncomingConnection(ConnectionHandler):
         if self._is_bootstrap_request(data):
             self._rendezvous()
             return
+        foreign, msg_type, parameters = self.unpack(data)
+        self._verify_foreign(foreign)
+        self._verify_message(msg_type, parameters, None)
+        if msg_type == Protocol.Relay:
+            self.handle_relay(parameters)
         # message = decode(data)
 
-    def auth(self):
-        self.conn.receive_stuff()
+    def handle_relay(self, params):
+        package = params.get('PACKAGE')
+        unpacked = pickle.loads(self.local_keys.decrypt(package))
+        if unpacked.get('RECIPIENT') == self.local_finger.ident:
+            print 'Message Received: ', unpacked.get('MESSAGE')
+            return
+        else:
+            addr, port, key, ident = unpacked.get('NEXT')
+            self.fingerspace.put(addr, port, key, ident)
+            next_finger = self.fingerspace.get(ident)
+            self.log.info("Relaying message from %s to %s",
+                          self.foreign_finger.ident, next_finger.ident)
+            out = OutgoingConnection(
+                self.log, self.fingerspace, self.local_finger,
+                self.local_keys, foreign_finger=next_finger)
+            out.conn.connect(next_finger.address)
+            out.relay(unpacked.get('PACKAGE'))
 
 
 class OutgoingConnection(ConnectionHandler):
@@ -274,7 +326,68 @@ class OutgoingConnection(ConnectionHandler):
     The methods of this class define procedures for dealing with connections
     established locally to transmit to foreign nodes.
     """
-    def __init__(self, finger):
+    def __init__(self, log, fingerspace, local_finger, local_keys,
+                 foreign_finger=None):
         """
         :param finger: Finger of the node to connect to.
         """
+        self.log = log.getChild("outgoing")
+        self.conn = SocketWrapper()
+        self.fingerspace = fingerspace
+        self.local_finger = local_finger
+        self.local_keys = local_keys
+        self.foreign_finger = foreign_finger
+        if foreign_finger:
+            self.foreign_key = foreign_finger.get_cipher()
+
+    def connect(self, remote_address=None):
+        """Establish connection with foreign node"""
+        if remote_address:
+            self.conn.connect(remote_address)
+        elif self.foreign_finger:
+            self.conn.connect(self.foreign_finger.address)
+        else:
+            raise ProtocolError("No address to connect to.")
+
+    def send_message(self, recipient, message):
+        """
+        Send message.
+        """
+        path = self.fingerspace.get_random_fingers(3)
+        try:
+            path.remove(recipient)
+        except ValueError:
+            pass
+
+        cipher = recipient.get_cipher()
+        data = {
+            'MESSAGE': message,
+            'RECIPIENT': recipient.ident
+        }
+        package = cipher.encrypt(pickle.dumps(data, CFG_PICKLE_PROTOCOL))
+
+        print "Path Length of", len(path)
+        next_node = recipient
+
+        for idx, finger in enumerate(path):
+            contents = {
+                'NEXT': recipient.all if idx == 0 else path[idx-1].all,
+                'PACKAGE': package
+            }
+            print 'Path', idx, finger.ident
+            cipher = finger.get_cipher()
+            package = cipher.encrypt(
+                pickle.dumps(contents, CFG_PICKLE_PROTOCOL))
+            next_node = finger
+
+        params = {'PACKAGE': package}
+
+        print 'next ident', next_node.ident
+        self.foreign_finger = next_node
+        self.foreign_key = next_node.get_cipher()
+        self.connect()
+        self.send(Protocol.Relay, params)
+
+    def relay(self, package):
+        params = {'PACKAGE': package}
+        self.send(Protocol.Relay, params)
