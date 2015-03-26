@@ -21,8 +21,9 @@
 import socket
 import struct
 import string
+import pickle
 
-from random import randint, choice, SystemRandom
+from random import randint, SystemRandom
 from argparse import ArgumentTypeError
 
 from Crypto.PublicKey import RSA
@@ -203,12 +204,13 @@ class CipherWrap(object):
         if not isinstance(data, basestring):
             raise CipherError("Can only encrypt string data")
 
-        cryptic = ''
+        cryptic = []
         for chunk in split_chunks(data, part_size=split_size):
-            cryptic += self.rsa_instance.encrypt(chunk, None)[0]
-        return cryptic
+            cryptic.append(self.rsa_instance.encrypt(chunk, None)[0])
+        pseudo = pickle.dumps(cryptic)
+        return pseudo
 
-    def decrypt(self, cryptic_data, split_size=CFG_CRYPT_CHUNK_SIZE):
+    def decrypt(self, cryptic_data):
         """
         Decrypt a packet of data.
 
@@ -217,10 +219,11 @@ class CipherWrap(object):
         """
         if not self._has_private:
             raise CipherError("Can't decrypt, no private key!")
-        data = ''
-        for chunk in split_chunks(cryptic_data, part_size=split_size):
-            data += self.rsa_instance.decrypt(chunk)
-        return data
+        pseudo = pickle.loads(cryptic_data)
+        data = []
+        for chunk in pseudo:
+            data.append(self.rsa_instance.decrypt(chunk))
+        return ''.join(data)
 
 
 def split_address(address):

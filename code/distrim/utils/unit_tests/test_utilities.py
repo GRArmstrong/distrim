@@ -389,6 +389,19 @@ class TestSplitChunks(unittest.TestCase):
             self.assertEqual(start, chunk[0])
             self.assertEqual(end, chunk[-1])
 
+    def test_long_split(self):
+        """Split up a long string, put it back together again"""
+        test_str = "This could be a very long string indeed." * 5000  # 200000
+        out = []
+        for idx, chunk in enumerate(split_chunks(test_str)):
+            if idx == 1562:
+                self.assertEqual(len(chunk), 64)
+            else:
+                self.assertEqual(len(chunk), 128)
+            out.append(chunk)
+        reform = ''.join(out)
+        self.assertEqual(reform, test_str)
+
 
 class TestTimeDeltaFormat(unittest.TestCase):
     """Test timedelta utility function :func:`format_elapsed`"""
