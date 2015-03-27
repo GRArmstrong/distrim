@@ -23,16 +23,15 @@
 
 import unittest
 from mock import Mock
+from itertools import product
 
-import socket
 import pickle
 
-from Crypto.PublicKey import RSA
-
-from ..protocol import Protocol, ConnectionHandler
+from ..protocol import (Protocol, ConnectionHandler, IncomingConnection,
+                        MessageHandler)
 from ..fingerspace import Finger
-from ..utils.utilities import SocketWrapper, CipherWrap
 from ..assets.errors import ProtocolError, ProcedureError
+from ..utils.utilities import CipherWrap
 
 
 class ProtocolTest(unittest.TestCase):
@@ -132,7 +131,6 @@ class ConnectionHandlerFuncTests(unittest.TestCase):
 
     def test_package_unpack(self):
         """Test the packaging and unpackaging of pickled data"""
-        from itertools import product
         test_data_1 = "Data length 32 repeated 64 times" * 64  # 2048 bytes
         test_data_2 = "Data leng 32 repeated 512 times." * 512  # 16384 bytes
         test_dict_1 = {'td': test_data_1}
@@ -171,3 +169,36 @@ class ConnectionHandlerFuncTests(unittest.TestCase):
                           Protocol.Ping, {}, Protocol.Pong)
         self.assertRaises(ProtocolError, con._verify_message, Protocol.Ping,
                           {'tim': 'bob'})
+
+
+class MessageHandlingTests(unittest.TestCase):
+    """Test the functions of the MessageHandler class"""
+    def setUp(self):
+        test_data_path = (__file__.rpartition('/')[0]
+                          + "/_testdata_protocol.pickle")
+        with open(test_data_path) as handle:
+            test_data = pickle.load(handle)
+        self.nodes = []  # Gives 5 test nodes
+        for val in test_data:
+            finger = Finger(val['ip'], val['port'], val['pub'])
+            keys = CipherWrap(val['priv'])  # Private Key
+            self.nodes.append((finger, keys))  # self.nodes structure
+
+    def test_initial_pack(self):
+        """Test direct message passing"""
+        for idx, ((fng_a, key_a), (fng_b, key_b)) in enumerate(
+                product(self.nodes, self.nodes), 1):
+            node_a = MessageHandler(Mock(), None, fng_a, key_a)
+            node_b = IncomingConnection(Mock(), None, fng_a.address,
+                                        None, fng_b, key_b)
+
+            test_msg = "The quick brown fox jumped over the lazy dog."
+
+            cryptic_data = node_a._build_message(fng_b, test_msg)
+
+            cipher = CipherWrap(key_b.export(True, 1))
+            # unpacked = cipher.decrypt(cryptic_data)
+            # obj = pickle.loads(unpacked)
+            unpacked = node_b._peel_onion_layer(cryptic_data)
+            # self.assertEqual(test_msg, obj['MESSAGE'])
+            self.assertEqual(test_msg, unpacked['MESSAGE'])

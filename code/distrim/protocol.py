@@ -20,17 +20,14 @@
 
 from hashlib import md5
 
-import socket
-import struct
-import cPickle as pickle
+import pickle
+# import cPickle as pickle
 from cPickle import UnpicklingError
 
 from .fingerspace import Finger
 from .assets.errors import ProtocolError, ProcedureError, AuthError
-from .utils.config import (CFG_PICKLE_PROTOCOL, CFG_STRUCT_FMT,
-                           CFG_CRYPT_CHUNK_SIZE, CFG_TIMEOUT)
-from .utils.utilities import (SocketWrapper, CipherWrap, generate_padding,
-                              split_chunks)
+from .utils.config import CFG_PICKLE_PROTOCOL
+from .utils.utilities import SocketWrapper, generate_padding
 
 
 class Protocol(object):
@@ -119,14 +116,18 @@ class ConnectionHandler(object):
         data = pickle.dumps(msg, protocol=CFG_PICKLE_PROTOCOL)
         data_pack = data + generate_padding()
 
+        self.log.debug("Sen DataPack %s", md5(data_pack).hexdigest())
         cryptic_data = self.foreign_key.encrypt(data_pack)
+        self.log.debug("Sen Cryptic %s", md5(cryptic_data).hexdigest())
         return cryptic_data
 
     def unpack(self, cryptic_data):
         """
         Unpack data sent to this node by a foreign node.
         """
+        self.log.debug("Rec Cryptic %s", md5(cryptic_data).hexdigest())
         data = self.local_keys.decrypt(cryptic_data)
+        self.log.debug("Rec Data %s", md5(data).hexdigest())
 
         try:
             foreign, msg_type, params = pickle.loads(data)
@@ -302,7 +303,7 @@ class IncomingConnection(ConnectionHandler):
 
     def handle_relay(self, params):
         package = params.get('PACKAGE')
-        unpacked = pickle.loads(self.local_keys.decrypt(package))
+        unpacked = self._peel_onion_layer(package)
         if unpacked.get('RECIPIENT') == self.local_finger.ident:
             print 'Message Received: ', unpacked.get('MESSAGE')
             return
@@ -312,14 +313,19 @@ class IncomingConnection(ConnectionHandler):
             next_finger = self.fingerspace.get(ident)
             self.log.info("Relaying message from %s to %s",
                           self.foreign_finger.ident, next_finger.ident)
-            out = OutgoingConnection(
+            out = MessageHandler(
                 self.log, self.fingerspace, self.local_finger,
-                self.local_keys, foreign_finger=next_finger)
-            out.conn.connect(next_finger.address)
+                self.local_keys, next_finger)
+            out.connect()
             out.relay(unpacked.get('PACKAGE'))
 
+    def _peel_onion_layer(self, package):
+        data = self.local_keys.decrypt(package)
+        next_layer = pickle.loads(data)
+        return next_layer
 
-class OutgoingConnection(ConnectionHandler):
+
+class MessageHandler(ConnectionHandler):
     """
     Protocol Handler for outgoing communication with foreign nodes.
 
@@ -353,21 +359,26 @@ class OutgoingConnection(ConnectionHandler):
         """
         Send message.
         """
+        final_pack = self._build_message(recipient, message)
+        next_node, params = self._build_onion(recipient, final_pack)
+        print 'next ident', next_node.ident
+        self.foreign_finger = next_node
+        self.foreign_key = next_node.get_cipher()
+        self.connect()
+        self.send(Protocol.Relay, params)
+
+    def _build_onion(self, recipient, package):
+        """
+        Construct the onion package
+        """
+        next_node = recipient
         path = self.fingerspace.get_random_fingers(3)
         try:
             path.remove(recipient)
         except ValueError:
-            pass
-
-        cipher = recipient.get_cipher()
-        data = {
-            'MESSAGE': message,
-            'RECIPIENT': recipient.ident
-        }
-        package = cipher.encrypt(pickle.dumps(data, CFG_PICKLE_PROTOCOL))
+            pass  # We won't route a message to the recipient
 
         print "Path Length of", len(path)
-        next_node = recipient
 
         for idx, finger in enumerate(path):
             contents = {
@@ -381,12 +392,25 @@ class OutgoingConnection(ConnectionHandler):
             next_node = finger
 
         params = {'PACKAGE': package}
+        return next_node, params
 
-        print 'next ident', next_node.ident
-        self.foreign_finger = next_node
-        self.foreign_key = next_node.get_cipher()
-        self.connect()
-        self.send(Protocol.Relay, params)
+    def _build_message(self, recipient, message):
+        """
+        Construct the final message package received by the recipient.
+
+        :param recipient: Finger of the recipient.
+        :param message: Textual message for the recipient to receive.
+        """
+        contents = {
+            'MESSAGE': message,
+            'RECIPIENT': recipient.ident,
+            'SENDER': self.local_finger.all,
+        }
+        data = pickle.dumps(contents, CFG_PICKLE_PROTOCOL)
+
+        cipher = recipient.get_cipher()
+        cryptic_data = cipher.encrypt(data)
+        return cryptic_data
 
     def relay(self, package):
         params = {'PACKAGE': package}

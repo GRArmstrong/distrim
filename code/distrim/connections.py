@@ -26,7 +26,7 @@ from time import sleep
 from threading import Thread
 from thread_pool import ThreadPool
 
-from .protocol import IncomingConnection, OutgoingConnection, Boostrapper
+from .protocol import IncomingConnection, MessageHandler, Boostrapper
 from .utils.config import CFG_THREAD_POOL_LENGTH, CFG_LISTENING_QUEUE
 
 
@@ -95,7 +95,7 @@ class ConnectionsManager(object):
         :param recipient: Finger of the node to send the message to.
         :param message: Plaintext message to send.
         """
-        postman = OutgoingConnection(
+        postman = MessageHandler(
             self.log, self.fingerspace, self.local_finger, self.local_keys)
         postman.send_message(recipient, message)
 
