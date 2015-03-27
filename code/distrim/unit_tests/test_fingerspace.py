@@ -162,8 +162,9 @@ class FingerTests(unittest.TestCase):
 
     def test_get_cipher(self):
         """Tests the :func:`get_cipher` method :class:`Finger`"""
-        keys = RSA.generate(1024)
-        pubkey = keys.publickey().exportKey(format='DER')
+        from ..utils.utilities import CipherWrap
+        keys = CipherWrap(RSA.generate(1024))
+        pubkey = keys.export()
         obj = Finger('192.168.0.1', 2000, pubkey)
 
         test_data = "This is a beep boop"
@@ -353,7 +354,6 @@ class FingerSpaceTests(unittest.TestCase):
         fingers = fsi.get_all()
         expected = [Finger(*pars) for pars in self.test_node_list]
 
-        fingers.sort()
-        expected.sort()
-        for idx in xrange(len(expected)):
-            self.assertEqual(fingers[idx].all, expected[idx].all)
+        for finger in expected:
+            out = fsi.get(finger.ident)
+            self.assertIn(out, fingers)
