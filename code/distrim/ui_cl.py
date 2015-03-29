@@ -35,13 +35,18 @@ COMMANDS = [
 ]
 
 
-class CommandLineInterface(object):
-
+class CommandLine(object):
+    """
+    A Command Line Interface (CLI) for controlling an instance of a
+    :class:`Node`, including viewing node information and using the network to
+    send messages.
+    """
     def __init__(self, node_params):
         """
         :param node_params: Dictionary of parameters for :class:`Node`
         """
         self.node = Node(**node_params)
+        self.running = False
         self.prompt = "> "
         self._handlers = {
             'help': self.cmd_help,
@@ -182,7 +187,7 @@ def run_application(args):
         if args['logger'][1]:
             params['log_port'] = args['logger'][1]
 
-    cli = CommandLineInterface(params)
+    cli = CommandLine(params)
 
     boot_params = {}
     if args.get('bootstrap'):

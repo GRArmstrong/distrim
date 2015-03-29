@@ -73,6 +73,7 @@ class ConnectionHandler(object):
     """
     def __init__(self):
         raise NotImplementedError("ConnectionHandler is abstract!")
+        # pylint: disable=no-member
 
     def send(self, message_type, parameters):
         """
@@ -135,11 +136,7 @@ class ConnectionHandler(object):
             self.log.error("Unpickling error, %s", exc.message)
             self.log.error("Decrypted hash: %s", md5(data).hexdigest())
             raise ProtocolError("Couldn't de-serialise: %s" % (exc.message,))
-        except ValueError:
-            print ' ======= VALUE ERROR =========='
-            print 'data', data
-            print ' ======= =========== =========='
-            raise
+
         return foreign, msg_type, params
 
     def _verify_foreign(self, sender_info):
@@ -174,6 +171,7 @@ class ConnectionHandler(object):
         Terminate the connection
         """
         self.conn.close()
+        # pylint: enable=no-member
 
 
 class Boostrapper(ConnectionHandler):
@@ -210,11 +208,11 @@ class Boostrapper(ConnectionHandler):
         Establish connection and setup this object.
         """
         self.conn.connect(remote_address)
-        self.log.info("Bootstrap connection established.")
+        self.log.debug("Bootstrap connection established.")
         boot_package = pickle.dumps(self.local_finger.all,
                                     protocol=CFG_PICKLE_PROTOCOL)
         self.conn.send(boot_package)
-        self.log.info("Bootstrap package sent.")
+        self.log.debug("Bootstrap package sent.")
 
         # Expect back a welcome message.
         cryptic_data = self.conn.receive()  # Receive foreign data
@@ -267,7 +265,18 @@ class IncomingConnection(ConnectionHandler):
         self.local_keys = local_keys
 
     def _is_bootstrap_request(self, data):
-        """ Try and unpickle """
+        """
+        Determine if this node is trying to rendezvous.
+
+        Nodes that have not joined the network know of no other node or their
+        public key, so they will send their finger information unencrypted to
+        a bootstrap node. This attempts to load that data, if it fails then it
+        is assumed that it is an encrypted message from an existing node and
+        will be handled appropriately.
+
+        :param data: Raw data string received from the foreign node.
+        :return: True if this is a bootstrap request, else False.
+        """
         try:
             obj = pickle.loads(data)
             assert isinstance(obj, tuple)
@@ -280,16 +289,23 @@ class IncomingConnection(ConnectionHandler):
 
     def _rendezvous(self):
         """
-        Accept node into the network.
+        Accept a new node into the network by sharing our finger table.
         """
-        self.fingerspace.put(*self.foreign_finger.all)
-        self.log.info("Sending welcome message.")
+        self.log.info("Sending welcome message to %s",
+                      self.foreign_finger.ident)
         self.foreign_key = self.foreign_finger.get_cipher()
         parameters = {'NODES': self.fingerspace.export_nodes()}
         self.send(Protocol.Welcome, parameters)
+        self.fingerspace.put(*self.foreign_finger.all)
 
     def handle(self):
-        """ """
+        """
+        Perform handling of the incoming connection.
+
+        Receives data from the foreign node and deciphers it, this will call
+        one of the relevant handlers to deal with the connection based on what
+        the message type is.
+        """
         data = self.conn.receive()
         if self._is_bootstrap_request(data):
             self._rendezvous()
@@ -305,7 +321,10 @@ class IncomingConnection(ConnectionHandler):
         package = params.get('PACKAGE')
         unpacked = self._peel_onion_layer(package)
         if unpacked.get('RECIPIENT') == self.local_finger.ident:
-            print 'Message Received: ', unpacked.get('MESSAGE')
+            sender = unpacked.get('SENDER')
+            self.fingerspace.put(*sender)
+            self.log.info('Message Received from %s', sender[-1])
+            print '## Message: %s' % unpacked.get('MESSAGE')
             return
         else:
             addr, port, key, ident = unpacked.get('NEXT')
@@ -320,6 +339,7 @@ class IncomingConnection(ConnectionHandler):
             out.relay(unpacked.get('PACKAGE'))
 
     def _peel_onion_layer(self, package):
+        """Strips a layer from a message package"""
         data = self.local_keys.decrypt(package)
         next_layer = pickle.loads(data)
         return next_layer
@@ -377,15 +397,15 @@ class MessageHandler(ConnectionHandler):
             path.remove(recipient)
         except ValueError:
             pass  # We won't route a message to the recipient
-
-        print "Path Length of", len(path)
+        self.log.debug("Path Length %d", len(path))
+        _path_msg = " <-- ".join([f.ident for f in path])
+        self.log.debug("Path: %s <- %s", recipient.ident, _path_msg)
 
         for idx, finger in enumerate(path):
             contents = {
                 'NEXT': recipient.all if idx == 0 else path[idx-1].all,
                 'PACKAGE': package
             }
-            print 'Path', idx, finger.ident
             cipher = finger.get_cipher()
             package = cipher.encrypt(
                 pickle.dumps(contents, CFG_PICKLE_PROTOCOL))

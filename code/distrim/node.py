@@ -34,7 +34,7 @@ class Node(object):
     """
     Representation of a single Node in the DistrIM network.
     """
-    def __init__(self, local_ip, local_port=CFG_LISTENING_PORT,  log_ip='',
+    def __init__(self, local_ip, local_port=CFG_LISTENING_PORT, log_ip='',
                  log_port=CFG_LOGGER_PORT):
         """
         A node within the peer-to-peer network.
@@ -79,6 +79,9 @@ class Node(object):
             self.conn_manager.bootstrap(remote_ip, remote_port)
 
     def stop(self):
+        """
+        Stop the node and exit from the network.
+        """
         self.log.info("Node Stopping...")
         self.conn_manager.stop()
 

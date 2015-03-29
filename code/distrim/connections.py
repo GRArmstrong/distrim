@@ -46,6 +46,7 @@ class ConnectionsManager(object):
         self.fingerspace = fingerspace
         self.local_finger = finger
         self.local_keys = keys
+        self._running = False
 
         # Listener
         self._pool = ThreadPool(CFG_THREAD_POOL_LENGTH)
@@ -62,6 +63,7 @@ class ConnectionsManager(object):
         self.count_conn_failure = 0
 
     def start(self):
+        """Begin the listening and cleaning threads of this node."""
         self._running = True
         self._sock.bind((self.local_ip, self.local_port))
         self._sock.listen(CFG_LISTENING_QUEUE)
@@ -71,6 +73,7 @@ class ConnectionsManager(object):
                       self.local_port)
 
     def stop(self):
+        """Stop listening for connections and end the listening thread."""
         self._running = False
         try:
             self._sock.shutdown(socket.SHUT_RD)
@@ -113,7 +116,7 @@ class ConnectionsManager(object):
         :param address: Address of the connecting node.
         """
         try:
-            print 'New Connection from:', address
+            self.log.info('New Connection from: %s', address)
             connection = IncomingConnection(
                 self.log, sock, address, self.fingerspace, self.local_finger,
                 self.local_keys)
@@ -161,5 +164,4 @@ class ConnectionsManager(object):
                     self._pool.err_queue.get_nowait()
             except Exception as exc:  # pylint: disable=broad-except
                 self.log.error("Cleaning errors: %s", exc.message)
-                pass
         self.log.debug("Cleaning thread stopped.")
