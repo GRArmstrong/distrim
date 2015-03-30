@@ -88,6 +88,9 @@ class Node(object):
     def send_message(self, recipient, message):
         """
         Send a message.
+
+        :param recipient: Ident of the recipient.
+        :param message: The message to send.
         """
         rec = self.fingerspace.get(recipient)
         if not rec:

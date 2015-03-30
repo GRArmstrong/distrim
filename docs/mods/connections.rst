@@ -3,7 +3,8 @@
 Connections
 ===========
 
-Connections Documentation here.
+Connections deals with establishing connections to foreign
+nodes and listening out for incoming connections.
 
 
 Members

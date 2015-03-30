@@ -3,8 +3,6 @@
 Node
 ====
 
-Node Documentation
-
 
 Members
 =======

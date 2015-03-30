@@ -90,6 +90,9 @@ class Finger(object):
     def get_socket(self):
         """
         Get a socket object connected to this node.
+
+        :return: A :class:`SocketWrapper` instance with internal address
+            defined, but not connected.
         """
         return SocketWrapper(remote_address=self.address)
 
@@ -99,7 +102,7 @@ class Finger(object):
 
         Returns an instance of an RSA cipher of the Public Key of this Node.
 
-        :return: RSA Public Key instance.
+        :return: RSA Public Key instance of type :class:`CipherWrap`.
         """
         return CipherWrap(self.key)
 
@@ -139,7 +142,7 @@ class FingerSpace(object):
         Data is expected to be (ip address, port, public key[, ident])
         The ident is optional.
 
-        :param nodes: List of nodes.
+        :param nodes: List of nodes to import.
         """
         for values in nodes_list:
             try:
@@ -229,6 +232,7 @@ class FingerSpace(object):
         Get random fingers.
 
         :param number: How many fingers to return.
+        :return: The *number* of instances of :class:`Finger`.
         """
         with self.access:
             idents = self._keyspace.keys()
@@ -264,7 +268,7 @@ def generate_hash(ip_address, listening_port, public_key):
     :param listening_port: Listening port of the node.
     :param public_key: Public Key of the node in binary format.
 
-    :returns: String representation of an MD5 hex hash.
+    :return: String representation of an MD5 hex hash.
     """
     finger_type_test(ip_address, listening_port, public_key)
     concated = "%s%d%s" % (ip_address, listening_port, public_key)
@@ -320,6 +324,7 @@ def h2i(hex_string):
     This is used since the key for entries in the fingerspace is the Finger
     ident represented as a number.
 
-    :return: integer representation of hex string
+    :param hex_string: The string to convert.
+    :return: Integer representation of the hex string.
     """
     return int(hex_string, 16)
