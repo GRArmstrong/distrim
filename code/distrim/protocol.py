@@ -183,7 +183,10 @@ class Boostrapper(ConnectionHandler):
     """
     def __init__(self, log, fingerspace, local_finger, local_keys):
         """
-        :param timeout: Timeout time for socket.
+        :param log: Logger instance to output to.
+        :param fingerspace: The FingerSpace instance of this node.
+        :param local_finger: The Finger of this node.
+        :param local_keys: The CipherWrapper of this node.
         """
         self.log = log.getChild('bootstrapper')
         self.conn = SocketWrapper()
@@ -256,7 +259,12 @@ class IncomingConnection(ConnectionHandler):
     """
     def __init__(self, log, sock, addr, fingerspace, local_finger, local_keys):
         """
-        :param sock: The socket object.
+        :param log: Logger instance to output to.
+        :param sock: socket object of the incoming connection.
+        :param addr: address of the connecting node.
+        :param fingerspace: The FingerSpace instance of this node.
+        :param local_finger: The Finger of this node.
+        :param local_keys: The CipherWrapper of this node.
         """
         self.log = log.getChild("incoming@%s" % (addr[0],))
         self.conn = SocketWrapper(sock)
@@ -315,7 +323,6 @@ class IncomingConnection(ConnectionHandler):
         self._verify_message(msg_type, parameters, None)
         if msg_type == Protocol.Relay:
             self.handle_relay(parameters)
-        # message = decode(data)
 
     def handle_relay(self, params):
         package = params.get('PACKAGE')
@@ -355,7 +362,11 @@ class MessageHandler(ConnectionHandler):
     def __init__(self, log, fingerspace, local_finger, local_keys,
                  foreign_finger=None):
         """
-        :param finger: Finger of the node to connect to.
+        :param log: Logger instance to output to.
+        :param fingerspace: The FingerSpace instance of this node.
+        :param local_finger: The Finger of this node.
+        :param local_keys: The CipherWrapper of this node.
+        :param foreign_finger: The Finger of the foreign node.
         """
         self.log = log.getChild("outgoing")
         self.conn = SocketWrapper()
@@ -381,7 +392,6 @@ class MessageHandler(ConnectionHandler):
         """
         final_pack = self._build_message(recipient, message)
         next_node, params = self._build_onion(recipient, final_pack)
-        print 'next ident', next_node.ident
         self.foreign_finger = next_node
         self.foreign_key = next_node.get_cipher()
         self.connect()
