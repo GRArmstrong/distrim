@@ -103,6 +103,9 @@ class SocketWrapper(object):
         """
         Close connection with the foreign node.
         """
+        if not self.is_connected():
+            return
+
         try:
             self.sock.shutdown(socket.SHUT_RDWR)
             self.sock.close()

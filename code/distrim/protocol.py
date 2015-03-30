@@ -25,7 +25,8 @@ import pickle
 from cPickle import UnpicklingError
 
 from .fingerspace import Finger
-from .assets.errors import ProtocolError, ProcedureError, AuthError
+from .assets.errors import (ProtocolError, ProcedureError, AuthError,
+                            SockWrapError)
 from .utils.config import CFG_PICKLE_PROTOCOL
 from .utils.utilities import SocketWrapper, generate_padding
 
@@ -78,6 +79,9 @@ class ConnectionHandler(object):
     def send(self, message_type, parameters):
         """
         Construct a message and send it.
+
+        :param message_type: The type of message defined in :class:`Protocol`
+        :param parameters: Parameters of the message.
         """
         self._verify_message(message_type, parameters)
         cryptic_data = self.package(message_type, parameters)
@@ -117,18 +121,18 @@ class ConnectionHandler(object):
         data = pickle.dumps(msg, protocol=CFG_PICKLE_PROTOCOL)
         data_pack = data + generate_padding()
 
-        self.log.debug("Sen DataPack %s", md5(data_pack).hexdigest())
+        # self.log.debug("Sen DataPack %s", md5(data_pack).hexdigest())
         cryptic_data = self.foreign_key.encrypt(data_pack)
-        self.log.debug("Sen Cryptic %s", md5(cryptic_data).hexdigest())
+        # self.log.debug("Sen Cryptic %s", md5(cryptic_data).hexdigest())
         return cryptic_data
 
     def unpack(self, cryptic_data):
         """
         Unpack data sent to this node by a foreign node.
         """
-        self.log.debug("Rec Cryptic %s", md5(cryptic_data).hexdigest())
+        # self.log.debug("Rec Cryptic %s", md5(cryptic_data).hexdigest())
         data = self.local_keys.decrypt(cryptic_data)
-        self.log.debug("Rec Data %s", md5(data).hexdigest())
+        # self.log.debug("Rec Data %s", md5(data).hexdigest())
 
         try:
             foreign, msg_type, params = pickle.loads(data)
@@ -166,11 +170,21 @@ class ConnectionHandler(object):
             if key.upper() != key:
                 raise ProtocolError("Invalid key in parameters '%s'." % (key,))
 
+    def connect(self, remote_address=None):
+        """Establish connection with foreign node"""
+        if remote_address:
+            self.conn.connect(remote_address)
+        elif self.foreign_finger:
+            self.conn.connect(self.foreign_finger.address)
+        else:
+            raise ProtocolError("No address to connect to.")
+
     def close(self):
-        """
-        Terminate the connection
-        """
-        self.conn.close()
+        """Terminate the connection"""
+        try:
+            self.conn.close()
+        except SockWrapError as exc:
+            self.log.error("Error closing socket: %s", exc.message)
         # pylint: enable=no-member
 
 
@@ -240,6 +254,7 @@ class Boostrapper(ConnectionHandler):
         nodes_list = welcome_params.get('NODES')
         if nodes_list:
             self.fingerspace.import_nodes(nodes_list)
+            self.announce()
         self.log.info("SUCCESS! Rendezvous occured.")
 
     def announce(self):
@@ -247,7 +262,44 @@ class Boostrapper(ConnectionHandler):
         Make presence of this node known to others.
         """
         for finger in self.fingerspace.get_all():
+            if finger == self.foreign_finger:
+                continue
             self.log.info("Announce to %s" % finger)
+            announcer = Announcer(self.log, self.local_finger, self.local_keys,
+                                  finger)
+            announcer.announce()
+
+
+class Announcer(ConnectionHandler):
+    """
+    Protocol Handler for outgoing communication with foreign nodes.
+
+    The methods of this class define procedures for dealing with connections
+    established locally to transmit to foreign nodes.
+    """
+    def __init__(self, log, local_finger, local_keys, foreign_finger):
+        """
+        :param log: Logger instance to output to.
+        :param fingerspace: The FingerSpace instance of this node.
+        :param local_finger: The Finger of this node.
+        :param local_keys: The CipherWrapper of this node.
+        :param foreign_finger: The Finger of the foreign node.
+        """
+        self.log = log.getChild("announcer@%s" % foreign_finger.ident)
+        self.conn = SocketWrapper()
+        self.local_finger = local_finger
+        self.local_keys = local_keys
+        self.foreign_finger = foreign_finger
+        self.foreign_key = foreign_finger.get_cipher()
+
+    def announce(self):
+        """Send local finger information to a remote node."""
+        self.connect()
+        try:
+            self.send(Protocol.Announce, {'NODE': self.local_finger.all})
+        except Exception as exc:
+            self.log.error("Announcement Error: %s", exc.message)
+        self.close()
 
 
 class IncomingConnection(ConnectionHandler):
@@ -323,6 +375,8 @@ class IncomingConnection(ConnectionHandler):
         self._verify_message(msg_type, parameters, None)
         if msg_type == Protocol.Relay:
             self.handle_relay(parameters)
+        if msg_type == Protocol.Announce:
+            self.handle_announcement(parameters)
 
     def handle_relay(self, params):
         package = params.get('PACKAGE')
@@ -344,6 +398,12 @@ class IncomingConnection(ConnectionHandler):
                 self.local_keys, next_finger)
             out.connect()
             out.relay(unpacked.get('PACKAGE'))
+
+    def handle_announcement(self, params):
+        """Put node information in the FingerSpace"""
+        addr, port, key, ident = params.get('NODE')
+        self.log.info("Announcement from %s", ident)
+        self.fingerspace.put(addr, port, key, ident)
 
     def _peel_onion_layer(self, package):
         """Strips a layer from a message package"""
@@ -376,15 +436,6 @@ class MessageHandler(ConnectionHandler):
         self.foreign_finger = foreign_finger
         if foreign_finger:
             self.foreign_key = foreign_finger.get_cipher()
-
-    def connect(self, remote_address=None):
-        """Establish connection with foreign node"""
-        if remote_address:
-            self.conn.connect(remote_address)
-        elif self.foreign_finger:
-            self.conn.connect(self.foreign_finger.address)
-        else:
-            raise ProtocolError("No address to connect to.")
 
     def send_message(self, recipient, message):
         """
