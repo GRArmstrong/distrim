@@ -22,6 +22,7 @@ import socket
 import struct
 import string
 import pickle
+# import cPickle as pickle
 
 from random import randint, SystemRandom
 from argparse import ArgumentTypeError

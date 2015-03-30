@@ -27,7 +27,7 @@ from cPickle import UnpicklingError
 from .fingerspace import Finger
 from .assets.errors import (ProtocolError, ProcedureError, AuthError,
                             SockWrapError)
-from .utils.config import CFG_PICKLE_PROTOCOL
+from .utils.config import CFG_PICKLE_PROTOCOL, CFG_PATH_LENGTH
 from .utils.utilities import SocketWrapper, generate_padding
 
 
@@ -153,7 +153,7 @@ class ConnectionHandler(object):
                                  self.foreign_finger.ident)
                 raise AuthError("Info of foreign not match of locally stored")
         except AttributeError:
-            self.log.debug("Unknown connection, authenticating now...")
+            self.log.debug("Authenticating new connection...")
             self.foreign_finger = sender_finger
             self.foreign_key = sender_finger.get_cipher()
             self.fingerspace.put(*sender_info)
@@ -485,7 +485,7 @@ class MessageHandler(ConnectionHandler):
         Construct the onion package
         """
         next_node = recipient
-        path = self.fingerspace.get_random_fingers(3)
+        path = self.fingerspace.get_random_fingers(CFG_PATH_LENGTH)
         try:
             path.remove(recipient)
         except ValueError:
