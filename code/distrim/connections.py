@@ -26,7 +26,7 @@ from time import sleep
 from threading import Thread
 from thread_pool import ThreadPool
 
-from .protocol import IncomingConnection, MessageHandler, Boostrapper
+from .protocol import IncomingConnection, MessageHandler, Boostrapper, Leaver
 from .utils.config import CFG_THREAD_POOL_LENGTH, CFG_LISTENING_QUEUE
 
 
@@ -80,6 +80,13 @@ class ConnectionsManager(object):
             self._sock.close()
         except socket.error:
             pass
+
+        # Announce leaving to everyone.
+        for finger in self.fingerspace.get_all():
+            leaver = Leaver(self.log, self.local_finger, self.local_keys,
+                            finger)
+            leaver.leave()
+
         while not self._pool.out_queue.empty():
             sleep(0.2)
 
@@ -136,8 +143,12 @@ class ConnectionsManager(object):
         This method is the target of `self._thread`
         """
         while self._running:
-            sock, addr = self._sock.accept()
-            self.pool_new_connection(sock, addr)
+            try:
+                sock, addr = self._sock.accept()
+                self.pool_new_connection(sock, addr)
+            except socket.error as exc:
+                if exc.errno != 22:
+                    self.log.error("Socket error: %s", exc.strerror)
         self.log.debug("Listening thread stopped.")
 
     def _cleaning(self):

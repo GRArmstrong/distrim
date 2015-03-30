@@ -42,9 +42,10 @@ class Protocol(object):
     Message = "MESG"
     Ping = "PING"
     Pong = "PONG"
+    Quit = "QUIT"
     Relay = "RELY"
     Welcome = "WELC"
-    ALL = [Announce, Message, Ping, Pong, Relay, Welcome]
+    ALL = [Announce, Message, Ping, Pong, Quit, Relay, Welcome]
 
 
 class ConnectionHandler(object):
@@ -271,12 +272,7 @@ class Boostrapper(ConnectionHandler):
 
 
 class Announcer(ConnectionHandler):
-    """
-    Protocol Handler for outgoing communication with foreign nodes.
-
-    The methods of this class define procedures for dealing with connections
-    established locally to transmit to foreign nodes.
-    """
+    """Handler for announcing ourselves to foreign nodes."""
     def __init__(self, log, local_finger, local_keys, foreign_finger):
         """
         :param log: Logger instance to output to.
@@ -297,6 +293,33 @@ class Announcer(ConnectionHandler):
         self.connect()
         try:
             self.send(Protocol.Announce, {'NODE': self.local_finger.all})
+        except Exception as exc:
+            self.log.error("Announcement Error: %s", exc.message)
+        self.close()
+
+
+class Leaver(ConnectionHandler):
+    """Handler for announcing departure to foreign nodes."""
+    def __init__(self, log, local_finger, local_keys, foreign_finger):
+        """
+        :param log: Logger instance to output to.
+        :param fingerspace: The FingerSpace instance of this node.
+        :param local_finger: The Finger of this node.
+        :param local_keys: The CipherWrapper of this node.
+        :param foreign_finger: The Finger of the foreign node.
+        """
+        self.log = log.getChild("announcer@%s" % foreign_finger.ident)
+        self.conn = SocketWrapper()
+        self.local_finger = local_finger
+        self.local_keys = local_keys
+        self.foreign_finger = foreign_finger
+        self.foreign_key = foreign_finger.get_cipher()
+
+    def leave(self):
+        """Send local finger information to a remote node."""
+        self.connect()
+        try:
+            self.send(Protocol.Quit, {'IDENT': self.local_finger.ident})
         except Exception as exc:
             self.log.error("Announcement Error: %s", exc.message)
         self.close()
@@ -373,12 +396,27 @@ class IncomingConnection(ConnectionHandler):
         foreign, msg_type, parameters = self.unpack(data)
         self._verify_foreign(foreign)
         self._verify_message(msg_type, parameters, None)
-        if msg_type == Protocol.Relay:
-            self.handle_relay(parameters)
         if msg_type == Protocol.Announce:
             self.handle_announcement(parameters)
+        if msg_type == Protocol.Quit:
+            self.handle_leaver(parameters)
+        if msg_type == Protocol.Relay:
+            self.handle_relay(parameters)
+
+    def handle_announcement(self, params):
+        """Put node information in the FingerSpace"""
+        addr, port, key, ident = params.get('NODE')
+        self.log.info("Announcement from %s", ident)
+        self.fingerspace.put(addr, port, key, ident)
+
+    def handle_leaver(self, params):
+        """Remove a foreign node from network"""
+        ident = params.get('IDENT')
+        self.log.info('Goodbye to %s', ident)
+        self.fingerspace.remove(ident)
 
     def handle_relay(self, params):
+        """Relay package from one node to another"""
         package = params.get('PACKAGE')
         unpacked = self._peel_onion_layer(package)
         if unpacked.get('RECIPIENT') == self.local_finger.ident:
@@ -398,12 +436,6 @@ class IncomingConnection(ConnectionHandler):
                 self.local_keys, next_finger)
             out.connect()
             out.relay(unpacked.get('PACKAGE'))
-
-    def handle_announcement(self, params):
-        """Put node information in the FingerSpace"""
-        addr, port, key, ident = params.get('NODE')
-        self.log.info("Announcement from %s", ident)
-        self.fingerspace.put(addr, port, key, ident)
 
     def _peel_onion_layer(self, package):
         """Strips a layer from a message package"""
