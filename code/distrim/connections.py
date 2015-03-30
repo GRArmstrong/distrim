@@ -26,8 +26,10 @@ from time import sleep
 from threading import Thread
 from thread_pool import ThreadPool
 
-from .protocol import IncomingConnection, MessageHandler, Boostrapper
-from .utils.config import CFG_THREAD_POOL_LENGTH, CFG_LISTENING_QUEUE
+from .protocol import (IncomingConnection, MessageHandler, Boostrapper,
+                       PingHandler)
+from .utils.config import (CFG_THREAD_POOL_LENGTH, CFG_LISTENING_QUEUE,
+                           CFG_PINGER_INTERVAL)
 
 
 class ConnectionsManager(object):
@@ -58,6 +60,10 @@ class ConnectionsManager(object):
         self._cleaner = Thread(target=self._cleaning, name='Thread-Cleaner')
         self._cleaner.daemon = True
 
+        # Keep-Alive Pinger
+        self._pinger = Thread(target=self._ping, name='Thread-Pinger')
+        self._pinger.daemon = True
+
         # Some nice stats, because why not
         self.count_conn_success = 0
         self.count_conn_failure = 0
@@ -69,6 +75,7 @@ class ConnectionsManager(object):
         self._sock.listen(CFG_LISTENING_QUEUE)
         self._thread.start()
         self._cleaner.start()
+        self._pinger.start()
         self.log.info("Listening for connections on %s:%d", self.local_ip,
                       self.local_port)
 
@@ -165,3 +172,18 @@ class ConnectionsManager(object):
             except Exception as exc:  # pylint: disable=broad-except
                 self.log.error("Cleaning errors: %s", exc.message)
         self.log.debug("Cleaning thread stopped.")
+
+    def _ping(self):
+        """
+        Pings foreign nodes, checks that they're still alive.
+        """
+        while self._running:
+            sleep(CFG_PINGER_INTERVAL)
+            self.log.debug("Performing pinging now...")
+            for finger in self.fingerspace.get_all():
+                pinger = PingHandler(
+                    self.log, self.fingerspace, self.local_finger,
+                    self.local_keys, finger)
+                pinger.ping()
+                # pinger.close()
+        self.log.debug("Pinging thread stopped.")

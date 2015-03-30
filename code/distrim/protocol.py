@@ -19,6 +19,7 @@
 """
 
 from hashlib import md5
+from time import sleep
 
 import pickle
 # import cPickle as pickle
@@ -75,6 +76,16 @@ class ConnectionHandler(object):
         raise NotImplementedError("ConnectionHandler is abstract!")
         # pylint: disable=no-member
 
+    def connect(self, remote_address=None):
+        """Establish connection with foreign node"""
+        if remote_address:
+            self.conn.connect(remote_address)
+        elif self.foreign_finger:
+            print 'Trying this...'
+            self.conn.connect(self.foreign_finger.address)
+        else:
+            raise ProtocolError("No address to connect to.")
+
     def send(self, message_type, parameters):
         """
         Construct a message and send it.
@@ -117,9 +128,7 @@ class ConnectionHandler(object):
         data = pickle.dumps(msg, protocol=CFG_PICKLE_PROTOCOL)
         data_pack = data + generate_padding()
 
-        self.log.debug("Sen DataPack %s", md5(data_pack).hexdigest())
         cryptic_data = self.foreign_key.encrypt(data_pack)
-        self.log.debug("Sen Cryptic %s", md5(cryptic_data).hexdigest())
         return cryptic_data
 
     def unpack(self, cryptic_data):
@@ -315,9 +324,11 @@ class IncomingConnection(ConnectionHandler):
         self._verify_message(msg_type, parameters, None)
         if msg_type == Protocol.Relay:
             self.handle_relay(parameters)
-        # message = decode(data)
+        if msg_type == Protocol.Ping:
+            self.handle_ping()
 
     def handle_relay(self, params):
+        """Relay a message from one node to another."""
         package = params.get('PACKAGE')
         unpacked = self._peel_onion_layer(package)
         if unpacked.get('RECIPIENT') == self.local_finger.ident:
@@ -338,6 +349,11 @@ class IncomingConnection(ConnectionHandler):
             out.connect()
             out.relay(unpacked.get('PACKAGE'))
 
+    def handle_ping(self):
+        """Keep-Alive message, responds with a Pong."""
+        self.log.info("Pong!")
+        self.send(Protocol.Pong, {})
+
     def _peel_onion_layer(self, package):
         """Strips a layer from a message package"""
         data = self.local_keys.decrypt(package)
@@ -355,7 +371,11 @@ class MessageHandler(ConnectionHandler):
     def __init__(self, log, fingerspace, local_finger, local_keys,
                  foreign_finger=None):
         """
-        :param finger: Finger of the node to connect to.
+        :param log: Logger instance to output to.
+        :param fingerspace: The FingerSpace instance of this node.
+        :param local_finger: The Finger of this node.
+        :param local_keys: The CipherWrapper of this node.
+        :param foreign_finger: The Finger of the foreign node.
         """
         self.log = log.getChild("outgoing")
         self.conn = SocketWrapper()
@@ -366,22 +386,12 @@ class MessageHandler(ConnectionHandler):
         if foreign_finger:
             self.foreign_key = foreign_finger.get_cipher()
 
-    def connect(self, remote_address=None):
-        """Establish connection with foreign node"""
-        if remote_address:
-            self.conn.connect(remote_address)
-        elif self.foreign_finger:
-            self.conn.connect(self.foreign_finger.address)
-        else:
-            raise ProtocolError("No address to connect to.")
-
     def send_message(self, recipient, message):
         """
         Send message.
         """
         final_pack = self._build_message(recipient, message)
         next_node, params = self._build_onion(recipient, final_pack)
-        print 'next ident', next_node.ident
         self.foreign_finger = next_node
         self.foreign_key = next_node.get_cipher()
         self.connect()
@@ -435,3 +445,54 @@ class MessageHandler(ConnectionHandler):
     def relay(self, package):
         params = {'PACKAGE': package}
         self.send(Protocol.Relay, params)
+
+
+class PingHandler(ConnectionHandler):
+    """Ping a foreign node to check if it's alive."""
+    def __init__(self, log, fingerspace, local_finger, local_keys,
+                 foreign_finger):
+        """
+        :param log: Logger instance to output to.
+        :param fingerspace: The FingerSpace instance of this node.
+        :param local_finger: The Finger of this node.
+        :param local_keys: The CipherWrapper of this node.
+        :param foreign_finger: The Finger of the foreign node.
+        """
+        self.log = log.getChild("pinger@%s" % foreign_finger.ident)
+        self.conn = SocketWrapper()
+        self.fingerspace = fingerspace
+        self.local_finger = local_finger
+        self.local_keys = local_keys
+        self.foreign_finger = foreign_finger
+        self.foreign_key = foreign_finger.get_cipher()
+
+    def ping(self):
+        """
+        Check if the foreign node exists.
+        """
+        if not self._ping_counter():
+            self.fingerspace.remove(self.foreign_finger.ident)
+
+    def _ping_counter(self, attempts=3):
+        """
+        Perform the ping action a number of times.
+        """
+        for attempt in xrange(attempts):
+            try:
+                self._perform_ping()
+                return True
+            except Exception as exc:
+                print 'exc', exc.message
+                self.log.debug("No response from %s for attempt #%d",
+                               self.foreign_finger.ident, attempt + 1)
+                sleep(3)
+        return False
+
+    def _perform_ping(self):
+        """
+        Establish connection.
+        """
+        self.connect()
+        self.log.info("Ping! (@%s)", self.foreign_finger.ident)
+        self.send(Protocol.Ping, {})
+        self.receive(Protocol.Pong)
