@@ -20,7 +20,7 @@
 
 import random
 
-from hashlib import md5
+from hashlib import sha256
 from threading import Semaphore
 from Crypto.PublicKey import RSA
 
@@ -258,9 +258,9 @@ def generate_hash(ip_address, listening_port, public_key):
     """
     Creates the identifying hash.
 
-    The hash is generated using the md5 function. The IP address, listening
+    The hash is generated using the sha256 function. The IP address, listening
     port, and the public key are concatenated together into a single string.
-    The string is hashed using the md5 function.
+    The string is hashed using the sha256 function.
 
     For demonstration purposes the length of the hash is reduced to 2 bytes.
 
@@ -272,7 +272,7 @@ def generate_hash(ip_address, listening_port, public_key):
     """
     finger_type_test(ip_address, listening_port, public_key)
     concated = "%s%d%s" % (ip_address, listening_port, public_key)
-    ash = md5(concated)
+    ash = sha256(concated)
     return ash.hexdigest()[:4]
 
 

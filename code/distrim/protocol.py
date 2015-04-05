@@ -21,8 +21,7 @@
 from hashlib import md5
 
 import pickle
-# import cPickle as pickle
-from cPickle import UnpicklingError
+from pickle import UnpicklingError
 
 from .fingerspace import Finger
 from .assets.errors import (ProtocolError, ProcedureError, AuthError,
@@ -122,18 +121,14 @@ class ConnectionHandler(object):
         data = pickle.dumps(msg, protocol=CFG_PICKLE_PROTOCOL)
         data_pack = data + generate_padding()
 
-        # self.log.debug("Sen DataPack %s", md5(data_pack).hexdigest())
         cryptic_data = self.foreign_key.encrypt(data_pack)
-        # self.log.debug("Sen Cryptic %s", md5(cryptic_data).hexdigest())
         return cryptic_data
 
     def unpack(self, cryptic_data):
         """
         Unpack data sent to this node by a foreign node.
         """
-        # self.log.debug("Rec Cryptic %s", md5(cryptic_data).hexdigest())
         data = self.local_keys.decrypt(cryptic_data)
-        # self.log.debug("Rec Data %s", md5(data).hexdigest())
 
         try:
             foreign, msg_type, params = pickle.loads(data)

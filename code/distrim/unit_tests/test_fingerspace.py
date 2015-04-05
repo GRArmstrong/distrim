@@ -54,7 +54,7 @@ class FunctionTests(unittest.TestCase):
             pc9b47cYAUnDd27QIZ/U/FvTcb+Fjhhb3zb+FFvykzGO1YobhaYXQKlnZuFiBq2Z
             JJrG7JW3onqtfHFi4wIDAQAB
             -----END PUBLIC KEY-----"""
-        expected = "70e0"
+        expected = "0f54"
 
         bin_key = a2b(pub_key)
 
