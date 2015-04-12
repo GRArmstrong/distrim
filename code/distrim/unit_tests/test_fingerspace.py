@@ -13,6 +13,9 @@
 ## governing the award of the Degree of BSc (Honours) Computer Science
 ## at the University of Northumbria at Newcastle.
 
+# Python testing module:
+#    http://docs.python-guide.org/en/latest/writing/tests/
+
 # pylint: disable=protected-access
 
 """
@@ -149,9 +152,6 @@ class FingerTests(unittest.TestCase):
         vals.remove(('192.168.0.1', 2000, valid_key))
 
         for addr, port, key in vals:
-            # with self.assertRaises(FingerError):
-            #     Finger(addr, port, key)
-            #     print addr, port
             self.assertRaises(FingerError, Finger, addr, port, key)
 
     def test_hash_mismatch(self):

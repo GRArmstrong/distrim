@@ -196,9 +196,5 @@ class MessageHandlingTests(unittest.TestCase):
 
             cryptic_data = node_a._build_message(fng_b, test_msg)
 
-            cipher = CipherWrap(key_b.export(True, 1))
-            # unpacked = cipher.decrypt(cryptic_data)
-            # obj = pickle.loads(unpacked)
             unpacked = node_b._peel_onion_layer(cryptic_data)
-            # self.assertEqual(test_msg, obj['MESSAGE'])
             self.assertEqual(test_msg, unpacked['MESSAGE'])
